@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    paths-ignore:
+      - '**/README.md'
+      - '**/README.en.md'
+      - 'CHANGELOG.md'
+      - 'CONTRIBUTING.md'
+      - 'AGENTS.md'
+      - 'src/docs/**'
+      - 'logo.svg'
+      - '.run/**'
+      - '.idea/**'
+      - '.gitignore'
+      - '.editorconfig'
+      - '.codacy.yaml'
+
+    branches:
+      - main
+
+  pull_request:
+    paths-ignore:
+      - '**/README.md'
+      - '**/README.en.md'
+      - 'CHANGELOG.md'
+      - 'CONTRIBUTING.md'
+      - 'AGENTS.md'
+      - 'src/docs/**'
+      - 'logo.svg'
+      - '.run/**'
+      - '.idea/**'
+      - '.gitignore'
+      - '.editorconfig'
+      - '.codacy.yaml'
+
+    branches:
+      - master
+      - 'dev/**'
+      - 'fix/**'
+      - 'feat/**'
+      - 'feature/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.repository_owner == 'TAKETODAY'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout project sources
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: liberica
+          java-version: '25'
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Checking
+        run: ./gradlew -DCI=true --no-daemon --no-parallel check --scan
+
+      - name: Upload Reports
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: reports
+          path: "**/build/reports/"

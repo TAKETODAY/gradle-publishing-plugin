@@ -1,0 +1,75 @@
+plugins {
+  id 'com.gradle.plugin-publish' version '2.2.1'
+  id "io.github.gradle-nexus.publish-plugin" version "2.0.0"
+}
+
+apply plugin: "java"
+apply plugin: "signing"
+apply plugin: "maven-publish"
+apply plugin: "java-gradle-plugin"
+
+group = 'cn.taketoday'
+description = 'Gradle plugin to publishing to Maven Central'
+
+ext {
+  isSnapshot = version.endsWith('SNAPSHOT')
+  isReleaseVersion = !isSnapshot
+}
+
+java {
+  sourceCompatibility = 17
+  targetCompatibility = 17
+}
+
+repositories {
+  mavenCentral()
+  mavenLocal()
+  maven { url = "https://central.sonatype.com/repository/maven-snapshots/" }
+}
+
+
+dependencies {
+  implementation(platform("cn.taketoday:infra-bom:$infraVersion"))
+  implementation "cn.taketoday:infra-web-client"
+
+  implementation 'org.json:json:20251224'
+}
+
+
+gradlePlugin {
+  website = "https://github.com/TAKETODAY/gradle-publishing-plugin"
+  vcsUrl = "https://github.com/TAKETODAY/gradle-publishing-plugin"
+  plugins {
+    create('publishingPlugin') {
+      id = "cn.taketoday.publishing"
+      tags = ['maven-central', 'maven-central-portal', 'publishing', 'snapshots']
+      displayName = "Gradle Publishing Plugin"
+      description = "Gradle Publishing Plugin"
+      implementationClass = "cn.taketoday.publishing.PublishingPlugin"
+    }
+  }
+}
+
+
+signing {
+  def signingKey = findProperty("signingKey")
+  def signingKeyId = findProperty("signingKeyId")
+  def signingPassword = findProperty("signingPassword")
+  useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+}
+
+
+nexusPublishing {
+  String repoUsername = project.properties["mavenCentralUsername"]
+  String repoPassword = project.properties["mavenCentralPassword"]
+
+  repositories {
+    sonatype {
+      username.set(repoUsername)
+      password.set(repoPassword)
+      nexusUrl.set(uri("https://ossrh-staging-api.central.sonatype.com/service/local/"))
+      snapshotRepositoryUrl.set(uri("https://central.sonatype.com/repository/maven-snapshots/"))
+    }
+  }
+}
+
