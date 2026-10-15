@@ -40,3 +40,16 @@
 - 若上游原测试或文档与代码一同提交，以生产行为为主题；仅测试或仅文档的独立提交才分别用 `:white_check_mark:` 或 `:memo:`。测试映射、运行命令及结果集中写入批末归档，不塞进每个提交正文。代码、原测试及适用中文文档优先放在同一个目标提交，不人为拆分凑数。
 - 提交信息可以按照上游的来，但是要保证中文
 
+## Agent skills
+
+### Issue tracker
+
+工单与规格使用 `TAKETODAY/gradle-publishing-plugin` 的 GitHub Issues，通过 `gh` CLI 操作。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认分诊标签，角色名称与标签字符串一致。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+采用 single-context 布局：根目录 `GLOSSARY.md` 与 `docs/adr/`。详见 `docs/agents/domain.md`。
