@@ -21,11 +21,14 @@ import org.gradle.api.credentials.PasswordCredentials;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
+import org.gradle.util.internal.ConfigureUtil;
 
 import java.net.URI;
 import java.time.Duration;
 
 import javax.inject.Inject;
+
+import groovy.lang.Closure;
 
 /**
  * Configures Maven Central publishing defaults for this project.
@@ -131,6 +134,24 @@ public abstract class MavenCentralExtension {
    */
   public BundleOptions getBundle() {
     return bundle;
+  }
+
+  /**
+   * Configures the Maven Central bundle archive.
+   *
+   * @param action the bundle configuration
+   */
+  public void bundle(Action<? super BundleOptions> action) {
+    action.execute(bundle);
+  }
+
+  /**
+   * Configures the Maven Central bundle archive from a Groovy closure.
+   *
+   * @param closure the bundle configuration closure
+   */
+  public void bundle(Closure<?> closure) {
+    ConfigureUtil.configure(closure, bundle);
   }
 
   /**

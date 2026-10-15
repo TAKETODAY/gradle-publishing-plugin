@@ -1,3 +1,6 @@
+import cn.taketoday.publishing.BundleFormat
+import cn.taketoday.publishing.PublishingType
+
 plugins {
   id 'com.gradle.plugin-publish' version '2.2.1'
   id "cn.taketoday.publishing"
@@ -92,4 +95,15 @@ signing {
   def signingPassword = findProperty("signingPassword")
   useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
   sign(publishing.publications)
+}
+
+mavenCentral {
+  bundle {
+    format = BundleFormat.ZIP
+    archiveFileName = 'bundle.zip'
+    zip64 = false
+  }
+
+  maxStatusRetries = 5
+  publishingType = PublishingType.AUTOMATIC
 }

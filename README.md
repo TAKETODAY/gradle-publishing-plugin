@@ -11,6 +11,7 @@
 
 ```groovy
 import cn.taketoday.publishing.PublishingType
+import cn.taketoday.publishing.BundleFormat
 import java.time.Duration
 
 mavenCentral {
