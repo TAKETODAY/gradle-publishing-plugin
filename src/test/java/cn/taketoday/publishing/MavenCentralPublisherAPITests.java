@@ -31,11 +31,52 @@ import java.nio.file.Path;
 import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 class MavenCentralPublisherAPITests {
 
   @TempDir
   Path directory;
+
+  @Test
+  void statusAcceptsOkResponse() throws Exception {
+    verifyStatusResponse(200);
+  }
+
+  @Test
+  void statusRejectsUnauthorizedResponse() throws Exception {
+    verifyStatusResponse(401);
+  }
+
+  private void verifyStatusResponse(int statusCode) throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/api/v1/publisher/status", exchange -> {
+      exchange.getRequestBody().readAllBytes();
+      byte[] response = "{\"deploymentState\":\"PUBLISHED\"}".getBytes(StandardCharsets.UTF_8);
+      exchange.sendResponseHeaders(statusCode, response.length);
+      try (var body = exchange.getResponseBody()) {
+        body.write(response);
+      }
+    });
+    server.start();
+    try {
+      var project = ProjectBuilder.builder().withProjectDir(directory.toFile()).build();
+      PasswordCredentials credentials = project.getObjects().newInstance(PasswordCredentials.class);
+      credentials.setUsername("test-user");
+      credentials.setPassword("test-password");
+      var api = new MavenCentralPublisherAPI(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/"), credentials);
+      if (statusCode == 200) {
+        assertThat(api.getStatus("deployment-id").getString("deploymentState")).isEqualTo("PUBLISHED");
+      }
+      else {
+        assertThatIllegalStateException().isThrownBy(() -> api.getStatus("deployment-id"))
+                .withMessageContaining("unexpected response code " + statusCode);
+      }
+    }
+    finally {
+      server.stop(0);
+    }
+  }
 
   @Test
   void uploadAuthenticatesWithUsernameAndPassword() throws Exception {

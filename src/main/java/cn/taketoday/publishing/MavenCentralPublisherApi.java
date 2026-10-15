@@ -76,7 +76,7 @@ final class MavenCentralPublisherAPI {
   }
 
   private static void assertStatus(HttpRequest request, ClientResponse response) {
-    Assert.state(response.getRawStatusCode() == 201,
+    Assert.state(response.getStatusCode().is2xxSuccessful(),
             () -> "unexpected response code " + response.getRawStatusCode() + " for " + request.getURI());
   }
 
