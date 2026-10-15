@@ -21,8 +21,10 @@ import com.sun.net.httpserver.HttpServer;
 import org.gradle.api.Project;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.InetSocketAddress;
@@ -32,6 +34,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
@@ -125,6 +128,134 @@ class MavenCentralConfigurationTests {
     task.getConfiguration().getMaxStatusRetries().set(0);
     task.getConfiguration().getStatusRequestInterval().set(Duration.ZERO);
     assertThatIllegalArgumentException().isThrownBy(task::run).withMessageContaining("statusRequestInterval");
+  }
+
+  @ParameterizedTest
+  @CsvSource({ "AUTOMATIC,false,PUBLISHING", "AUTOMATIC,false,PUBLISHED",
+      "AUTOMATIC,true,PUBLISHED", "USER_MANAGED,false,VALIDATED", "USER_MANAGED,true,VALIDATED" })
+  @Timeout(10)
+  void completesAtExpectedState(PublishingType type, boolean waitUntilPublished, String state) throws Exception {
+    AtomicInteger requests = new AtomicInteger();
+    AtomicReference<String> uploadQuery = new AtomicReference<>();
+    HttpServer server = stateServer(requests, uploadQuery, "{\"deploymentState\":\"" + state + "\"}");
+    try {
+      MavenCentralUploadTask task = uploadTask(server);
+      task.getConfiguration().getPublishingType().set(type);
+      task.getConfiguration().getWaitUntilFullyPublished().set(waitUntilPublished);
+
+      task.run();
+
+      assertThat(requests.get()).isEqualTo(1);
+      assertThat(uploadQuery.get()).contains("publishingType=" + type);
+      assertThat(task.getDeploymentIdFile().get().getAsFile()).hasContent("deployment-id");
+    }
+    finally {
+      server.stop(0);
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = { "PUBLISHING", "PUBLISHED", "FAILED" })
+  void manualPublishingRejectsUnexpectedTerminalStates(String state) throws Exception {
+    AtomicInteger requests = new AtomicInteger();
+    HttpServer server = stateServer(requests, new AtomicReference<>(), "{\"deploymentState\":\"" + state + "\"}");
+    try {
+      MavenCentralUploadTask task = uploadTask(server);
+      task.getConfiguration().getPublishingType().set(PublishingType.USER_MANAGED);
+
+      assertThatIllegalStateException().isThrownBy(task::run)
+              .withMessageContaining(state).withMessageContaining("expected VALIDATED");
+      assertThat(requests.get()).isEqualTo(1);
+    }
+    finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  void failedDeploymentReportsValidationErrorsAndPreservesDeploymentId() throws Exception {
+    AtomicInteger requests = new AtomicInteger();
+    HttpServer server = stateServer(requests, new AtomicReference<>(),
+            "{\"deploymentState\":\"FAILED\",\"errors\":{\"example:library:1.0\":[\"Missing signature\"]}}");
+    try {
+      MavenCentralUploadTask task = uploadTask(server);
+
+      assertThatIllegalStateException().isThrownBy(task::run)
+              .withMessageContaining("FAILED").withMessageContaining("Missing signature")
+              .withMessageContaining("example:library:1.0");
+      assertThat(requests.get()).isEqualTo(1);
+      assertThat(task.getDeploymentIdFile().get().getAsFile()).hasContent("deployment-id");
+    }
+    finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  @Timeout(10)
+  void pendingStatesDoNotConsumeFailureRetries() throws Exception {
+    AtomicInteger requests = new AtomicInteger();
+    HttpServer server = stateServer(requests, new AtomicReference<>(),
+            "{\"deploymentState\":\"PENDING\"}", "{\"deploymentState\":\"VALIDATING\"}",
+            "{\"deploymentState\":\"VALIDATING\"}", "{\"deploymentState\":\"PUBLISHING\"}",
+            "{\"deploymentState\":\"PUBLISHED\"}");
+    try {
+      MavenCentralUploadTask task = uploadTask(server);
+      task.getConfiguration().getMaxStatusRetries().set(0);
+      task.getConfiguration().getWaitUntilFullyPublished().set(true);
+
+      task.run();
+
+      assertThat(requests.get()).isEqualTo(5);
+    }
+    finally {
+      server.stop(0);
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(longs = { -1, 0, 999999 })
+  void rejectsIntervalsShorterThanOneMillisecondBeforeNetworkRequest(long nanos) throws Exception {
+    AtomicInteger requests = new AtomicInteger();
+    AtomicReference<String> uploadQuery = new AtomicReference<>();
+    HttpServer server = stateServer(requests, uploadQuery, "{\"deploymentState\":\"PUBLISHED\"}");
+    try {
+      MavenCentralUploadTask task = uploadTask(server);
+      task.getConfiguration().getStatusRequestInterval().set(Duration.ofNanos(nanos));
+
+      assertThatIllegalArgumentException().isThrownBy(task::run).withMessageContaining("statusRequestInterval");
+      assertThat(uploadQuery.get()).isNull();
+      assertThat(requests.get()).isZero();
+      assertThat(task.getDeploymentIdFile().get().getAsFile()).doesNotExist();
+    }
+    finally {
+      server.stop(0);
+    }
+  }
+
+  private HttpServer stateServer(AtomicInteger requests, AtomicReference<String> uploadQuery,
+          String... statuses) throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/api/v1/publisher/", exchange -> {
+      exchange.getRequestBody().readAllBytes();
+      boolean upload = exchange.getRequestURI().getPath().endsWith("/upload");
+      String response;
+      if (upload) {
+        uploadQuery.set(exchange.getRequestURI().getQuery());
+        response = "deployment-id";
+      }
+      else {
+        int index = requests.getAndIncrement();
+        response = index < statuses.length ? statuses[index] : "{\"deploymentState\":\"FAILED\"}";
+      }
+      byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+      exchange.sendResponseHeaders(upload ? 201 : 200, bytes.length);
+      try (var body = exchange.getResponseBody()) {
+        body.write(bytes);
+      }
+    });
+    server.start();
+    return server;
   }
 
   private MavenCentralUploadTask uploadTask(HttpServer server) throws Exception {
