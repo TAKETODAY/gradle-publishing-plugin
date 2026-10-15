@@ -85,6 +85,8 @@ public class PublishingPlugin implements Plugin<Project> {
       TaskProvider<?> publishToStagingRepositoryTask = getPublishToStagingRepositoryTask(project, publicationName);
       publishToStagingRepositoryTask.configure(task -> task.dependsOn(cleanStagingRepositoryTask));
       bundleTask.configure(task -> task.mustRunAfter(publishToStagingRepositoryTask));
+      project.getTasks().named("mavenCentralZipBundle").configure(task -> task.mustRunAfter(publishToStagingRepositoryTask));
+      project.getTasks().named("mavenCentralTarGzBundle").configure(task -> task.mustRunAfter(publishToStagingRepositoryTask));
       registerPublishTask(project, publicationName, publishToStagingRepositoryTask, uploadBundleTask);
     });
     TaskProvider<?> publishAllTask = registerPublishAllTask(project, uploadBundleTask);

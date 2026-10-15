@@ -79,6 +79,11 @@ class PublishingPluginTests {
       assertThat(staging.getTaskDependencies().getDependencies(staging))
               .extracting(Task::getName).contains("cleanMavenCentralStagingRepository");
       assertThat(bundle.getMustRunAfter().getDependencies(bundle)).extracting(Task::getName).contains(staging.getName());
+      for (String archiveName : new String[] { "mavenCentralZipBundle", "mavenCentralTarGzBundle" }) {
+        Task archive = task(archiveName);
+        assertThat(archive.getMustRunAfter().getDependencies(archive)).extracting(Task::getName)
+                .contains(staging.getName());
+      }
     }
     Task publishAll = task("publishToMavenCentral");
     assertThat(publishAll.getTaskDependencies().getDependencies(publishAll))
