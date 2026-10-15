@@ -29,8 +29,7 @@ repositories {
 
 
 dependencies {
-  implementation(platform("cn.taketoday:infra-bom:$infraVersion"))
-  implementation "cn.taketoday:infra-web-client"
+  implementation "cn.taketoday:infra-web-client:$infraVersion"
 
   implementation 'org.json:json:20251224'
 }
@@ -50,6 +49,34 @@ gradlePlugin {
   }
 }
 
+
+publishing {
+  publications.withType(MavenPublication).configureEach {
+    pom {
+      name = 'Gradle Publishing Plugin'
+      description = project.description
+      url = 'https://github.com/TAKETODAY/gradle-publishing-plugin'
+      licenses {
+        license {
+          name = 'Apache License, Version 2.0'
+          url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+        }
+      }
+      developers {
+        developer {
+          id = 'TAKETODAY'
+          name = '海子 Yang'
+          url = 'https://github.com/TAKETODAY'
+        }
+      }
+      scm {
+        connection = 'scm:git:https://github.com/TAKETODAY/gradle-publishing-plugin.git'
+        developerConnection = 'scm:git:ssh://git@github.com/TAKETODAY/gradle-publishing-plugin.git'
+        url = 'https://github.com/TAKETODAY/gradle-publishing-plugin'
+      }
+    }
+  }
+}
 
 signing {
   def signingKey = findProperty("signingKey")
