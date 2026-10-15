@@ -1,6 +1,6 @@
 plugins {
   id 'com.gradle.plugin-publish' version '2.2.1'
-  id "io.github.gradle-nexus.publish-plugin" version "2.0.0"
+  id "cn.taketoday.publishing" version "0.0.1"
 }
 
 apply plugin: "java"
@@ -84,19 +84,4 @@ signing {
   def signingPassword = findProperty("signingPassword")
   useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
   sign(publishing.publications)
-}
-
-
-nexusPublishing {
-  String repoUsername = project.properties["mavenCentralUsername"]
-  String repoPassword = project.properties["mavenCentralPassword"]
-
-  repositories {
-    sonatype {
-      username.set(repoUsername)
-      password.set(repoPassword)
-      nexusUrl.set(uri("https://ossrh-staging-api.central.sonatype.com/service/local/"))
-      snapshotRepositoryUrl.set(uri("https://central.sonatype.com/repository/maven-snapshots/"))
-    }
-  }
 }
