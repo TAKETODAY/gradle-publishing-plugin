@@ -9,7 +9,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
-  publish:
+  release-maven-central:
+    name: Release to Maven Central
     runs-on: ubuntu-latest
     steps:
       - name: Checkout project sources
@@ -35,7 +36,31 @@ jobs:
           ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.SIGNING_PASSWORD }}
         run: ./gradlew --no-daemon --no-parallel publishAllPublicationsToSonatypeRepository closeAndReleaseStagingRepositories
 
-      - name: Publishing Gradle Plugin
+      - name: Upload Reports
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: reports
+          path: "**/build/reports/"
+
+  publishing-gradle-plugin:
+    name: Publishing Gradle Plugin
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'TAKETODAY'
+    needs:
+      - release-maven-central
+    steps:
+      - name: Check Out Code
+        uses: actions/checkout@v7
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: liberica
+          java-version: '25'
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Publish
         env:
           ORG_GRADLE_PROJECT_signingKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingKeyId: ${{ secrets.SIGNING_KEY_ID }}
