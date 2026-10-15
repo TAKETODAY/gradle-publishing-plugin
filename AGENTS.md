@@ -1,3 +1,24 @@
+# Gradle Publishing Plugin
+
+## 构建与测试
+
+- 使用仓库自带的 Gradle Wrapper（Gradle 9.8.1），不要依赖系统 Gradle；源码目标为 Java 17。
+- 常用验证：`./gradlew check --no-daemon --console=plain`。CI 使用 `./gradlew -DCI=true --no-daemon --no-parallel check --scan`。
+- 运行单个测试类：`./gradlew test --tests cn.taketoday.publishing.MavenCentralPublisherAPITests --no-daemon --console=plain`；测试使用 JUnit Platform 和 AssertJ。
+- `settings.gradle` 通过 `includeBuild('publishing-bootstrap')` 加载本地引导插件；引导构建从 `../src/main/java` 编译同一份主源码。修改插件主代码后，优先用根项目 Wrapper 验证，避免只验证引导子构建。
+
+## 代码边界
+
+- 插件入口是 `cn.taketoday.publishing.PublishingPlugin`，插件 ID 为 `cn.taketoday.publishing`。
+- `src/main/java` 实现发布插件、Maven Central 上传任务和 HTTP API；`src/test/java` 目前主要覆盖 Publisher API 的 HTTP 行为。
+- 插件先发布到本地 `build/publishing/staging-repository`，再打包为 `build/publishing/bundle.zip`，最终由 `uploadMavenCentralBundle` 上传；相关任务由 `publishToMavenCentral` 汇总。
+
+## 发布
+
+- Maven Central 发布需要 `mavenCentralUsername`、`mavenCentralPassword`；可通过 `-P`、`ORG_GRADLE_PROJECT_*` 或 `~/.gradle/gradle.properties` 提供，凭据不要写入仓库。
+- 发布命令：`./gradlew --no-daemon --no-parallel publishToMavenCentral`。签名还需要 `signingKey`、`signingKeyId`、`signingPassword`。
+- Gradle Plugin Portal 发布使用 `./gradlew --no-daemon publishPlugins`，并需要 `GRADLE_PUBLISH_KEY` 和 `GRADLE_PUBLISH_SECRET`。
+- 发布标签使用 `v<版本号>`，而 `gradle.properties` 的 `version` 不带 `v`；创建标签前确认本地和远端没有同名标签且标签指向正确提交。
 
 ## 代码风格
 
