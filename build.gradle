@@ -56,6 +56,7 @@ signing {
   def signingKeyId = findProperty("signingKeyId")
   def signingPassword = findProperty("signingPassword")
   useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+  sign(publishing.publications)
 }
 
 
@@ -72,4 +73,3 @@ nexusPublishing {
     }
   }
 }
-
