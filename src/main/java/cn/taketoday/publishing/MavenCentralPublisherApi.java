@@ -43,7 +43,7 @@ final class MavenCentralPublisherAPI {
   MavenCentralPublisherAPI(URI baseUrl, PasswordCredentials credentials) {
     this.restClient = RestClient.builder().baseURI(baseUrl)
             .defaultHeaders(headers -> headers.setBearerAuth(
-                    HttpHeaders.encodeBasicAuth(credentials.getPassword(), credentials.getPassword(), StandardCharsets.UTF_8)))
+                    HttpHeaders.encodeBasicAuth(credentials.getUsername(), credentials.getPassword(), StandardCharsets.UTF_8)))
             .build();
   }
 

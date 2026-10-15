@@ -1,6 +1,6 @@
 plugins {
   id 'com.gradle.plugin-publish' version '2.2.1'
-  id "cn.taketoday.publishing" version "0.0.1"
+  id "cn.taketoday.publishing"
 }
 
 apply plugin: "java"
@@ -32,6 +32,14 @@ dependencies {
   implementation "cn.taketoday:infra-web-client:$infraVersion"
 
   implementation 'org.json:json:20251224'
+
+  testImplementation 'org.junit.jupiter:junit-jupiter:5.14.1'
+  testImplementation 'org.assertj:assertj-core:3.27.6'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+  useJUnitPlatform()
 }
 
 

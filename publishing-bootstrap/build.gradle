@@ -1,0 +1,32 @@
+plugins {
+  id 'java-gradle-plugin'
+}
+
+repositories {
+  mavenCentral()
+}
+
+def projectProperties = new Properties()
+file('../gradle.properties').withInputStream { projectProperties.load(it) }
+
+dependencies {
+  implementation "cn.taketoday:infra-web-client:${projectProperties.getProperty('infraVersion')}"
+  implementation 'org.json:json:20251224'
+}
+
+java {
+  sourceCompatibility = 17
+  targetCompatibility = 17
+}
+
+// 从同一份源码构建发布插件，确保本项目发布时使用尚未发布的修复。
+sourceSets.main.java.srcDir('../src/main/java')
+
+gradlePlugin {
+  plugins {
+    publishingPlugin {
+      id = 'cn.taketoday.publishing'
+      implementationClass = 'cn.taketoday.publishing.PublishingPlugin'
+    }
+  }
+}
