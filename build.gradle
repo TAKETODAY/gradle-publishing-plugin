@@ -9,7 +9,7 @@ apply plugin: "maven-publish"
 apply plugin: "java-gradle-plugin"
 
 group = 'cn.taketoday'
-description = 'Gradle plugin to publishing to Maven Central'
+description = 'Publishing Gradle plugin'
 
 ext {
   isSnapshot = version.endsWith('SNAPSHOT')
