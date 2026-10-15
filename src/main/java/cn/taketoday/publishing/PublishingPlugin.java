@@ -16,16 +16,21 @@
 
 package cn.taketoday.publishing;
 
+import org.gradle.api.DefaultTask;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.credentials.PasswordCredentials;
 import org.gradle.api.file.Directory;
+import org.gradle.api.file.RegularFile;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.publish.PublishingExtension;
 import org.gradle.api.publish.maven.MavenPublication;
 import org.gradle.api.publish.maven.plugins.MavenPublishPlugin;
 import org.gradle.api.tasks.Delete;
 import org.gradle.api.tasks.TaskProvider;
+import org.gradle.api.tasks.bundling.AbstractArchiveTask;
+import org.gradle.api.tasks.bundling.Compression;
+import org.gradle.api.tasks.bundling.Tar;
 import org.gradle.api.tasks.bundling.Zip;
 import org.gradle.plugins.signing.SigningPlugin;
 
@@ -56,9 +61,12 @@ public class PublishingPlugin implements Plugin<Project> {
   public void apply(Project project) {
     project.getPluginManager().apply(SigningPlugin.class);
     project.getPluginManager().apply(MavenPublishPlugin.class);
-    MavenCentralExtension extension = project.getExtensions().create("mavenCentral", MavenCentralExtension.class);
-    extension.getCredentials().convention(project.getProviders().credentials(PasswordCredentials.class, "mavenCentral"));
-    extension.getDeploymentName().convention(project.provider(() -> project.getGroup() + ":" + project.getName() + ":" + project.getVersion()));
+    MavenCentralExtension extension = project.getExtensions()
+            .create("mavenCentral", MavenCentralExtension.class);
+    extension.getCredentials().convention(
+            project.getProviders().credentials(PasswordCredentials.class, "mavenCentral"));
+    extension.getDeploymentName().convention(
+            project.provider(() -> project.getGroup() + ":" + project.getName() + ":" + project.getVersion()));
     PublishingExtension publishingExtension = project.getExtensions().getByType(PublishingExtension.class);
     Provider<Directory> outputDirectory = project.getLayout().getBuildDirectory().dir("publishing");
     Provider<Directory> stagingRepositoryDirectory = outputDirectory.map(it -> it.dir("staging-repository"));
@@ -68,7 +76,9 @@ public class PublishingPlugin implements Plugin<Project> {
     });
 
     TaskProvider<Delete> cleanStagingRepositoryTask = registerCleanStagingRepositoryTask(project, stagingRepositoryDirectory);
-    TaskProvider<Zip> bundleTask = registerBundleTask(project, stagingRepositoryDirectory, outputDirectory);
+    extension.getBundle().getDestinationDirectory().convention(outputDirectory);
+    extension.getBundle().getZip64().convention(false);
+    TaskProvider<DefaultTask> bundleTask = registerBundleTask(project, stagingRepositoryDirectory, extension);
     TaskProvider<MavenCentralUploadTask> uploadBundleTask = registerUploadBundleTask(project, bundleTask, outputDirectory, extension);
     publishingExtension.getPublications().withType(MavenPublication.class).all(publication -> {
       String publicationName = publication.getName();
@@ -89,24 +99,46 @@ public class PublishingPlugin implements Plugin<Project> {
     });
   }
 
-  private TaskProvider<Zip> registerBundleTask(Project project, Provider<Directory> stagingRepositoryDirectory, Provider<Directory> outputDirectory) {
-    return project.getTasks().register("mavenCentralBundle", Zip.class, task -> {
+  private TaskProvider<DefaultTask> registerBundleTask(Project project, Provider<Directory> stagingRepositoryDirectory, MavenCentralExtension extension) {
+    TaskProvider<Zip> zipTask = registerArchiveTask(project, "mavenCentralZipBundle", Zip.class,
+            stagingRepositoryDirectory, extension, BundleFormat.ZIP);
+    TaskProvider<Tar> tarTask = registerArchiveTask(project, "mavenCentralTarGzBundle", Tar.class,
+            stagingRepositoryDirectory, extension, BundleFormat.TAR_GZ);
+    return project.getTasks().register("mavenCentralBundle", DefaultTask.class, task -> {
       task.setGroup(PUBLISH_TASK_GROUP);
       task.setDescription("Bundles the local '" + STAGING_REPOSITORY_NAME + "' repository content.");
-      task.from(stagingRepositoryDirectory);
-      task.exclude("**/maven-metadata.xml*");
-      task.getDestinationDirectory().set(outputDirectory);
-      task.getArchiveFileName().set("bundle.zip");
+      task.dependsOn(zipTask, tarTask);
     });
   }
 
-  private TaskProvider<MavenCentralUploadTask> registerUploadBundleTask(Project project, TaskProvider<Zip> bundleTask,
+  private <T extends AbstractArchiveTask> TaskProvider<T> registerArchiveTask(Project project, String name, Class<T> type,
+          Provider<Directory> stagingRepositoryDirectory, MavenCentralExtension extension, BundleFormat format) {
+    return project.getTasks().register(name, type, task -> {
+      task.from(stagingRepositoryDirectory);
+      task.exclude("**/maven-metadata.xml*");
+      task.getDestinationDirectory().set(extension.getBundle().getDestinationDirectory());
+      task.getArchiveFileName().set(extension.getBundle().getArchiveFileName());
+      task.onlyIf(ignored -> extension.getBundle().getFormat().get() == format);
+      if (task instanceof Tar tar) {
+        tar.setCompression(Compression.GZIP);
+      }
+      else if (task instanceof Zip zip) {
+        zip.doFirst(ignored -> zip.setZip64(extension.getBundle().getZip64().get()));
+      }
+    });
+  }
+
+  private TaskProvider<MavenCentralUploadTask> registerUploadBundleTask(Project project, TaskProvider<DefaultTask> bundleTask,
           Provider<Directory> outputDirectory, MavenCentralExtension extension) {
-    TaskProvider<MavenCentralUploadTask> uploadTask = project.getTasks().register("uploadMavenCentralBundle", MavenCentralUploadTask.class, extension);
+    TaskProvider<MavenCentralUploadTask> uploadTask = project.getTasks()
+            .register("uploadMavenCentralBundle", MavenCentralUploadTask.class, extension);
     uploadTask.configure(task -> {
       task.setGroup(PUBLISH_TASK_GROUP);
       task.setDescription("Uploads, validates and publishes the '" + bundleTask.getName() + "' to Maven Central.");
-      task.getBundleFile().set(bundleTask.flatMap(Zip::getArchiveFile));
+      Provider<RegularFile> zipFile = project.getTasks().named("mavenCentralZipBundle", Zip.class).flatMap(Zip::getArchiveFile);
+      Provider<RegularFile> tarFile = project.getTasks().named("mavenCentralTarGzBundle", Tar.class).flatMap(Tar::getArchiveFile);
+      task.getBundleFile().set(extension.getBundle().getFormat()
+              .flatMap(format -> format == BundleFormat.ZIP ? zipFile : tarFile));
       task.getDeploymentIdFile().set(outputDirectory.map(it -> it.file("deployment-id.txt")));
     });
     return uploadTask;

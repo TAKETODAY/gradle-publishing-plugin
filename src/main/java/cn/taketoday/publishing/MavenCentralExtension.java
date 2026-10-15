@@ -16,15 +16,16 @@
 
 package cn.taketoday.publishing;
 
-import org.gradle.api.provider.Property;
 import org.gradle.api.Action;
 import org.gradle.api.credentials.PasswordCredentials;
+import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.model.ObjectFactory;
-
-import javax.inject.Inject;
+import org.gradle.api.provider.Property;
 
 import java.net.URI;
 import java.time.Duration;
+
+import javax.inject.Inject;
 
 /**
  * Configures Maven Central publishing defaults for this project.
@@ -34,31 +35,42 @@ import java.time.Duration;
  */
 public abstract class MavenCentralExtension {
 
+  private final BundleOptions bundle;
+
   /**
    * Creates Maven Central publishing options.
    */
-  public MavenCentralExtension() {
+  @Inject
+  public MavenCentralExtension(ObjectFactory objects) {
+    this.bundle = new BundleOptions(objects);
     getPublishingType().convention(PublishingType.AUTOMATIC);
     getWaitUntilFullyPublished().convention(false);
     getStatusRequestInterval().convention(Duration.ofSeconds(1));
     getMaxStatusRetries().convention(3);
     getBaseUrl().convention(URI.create("https://central.sonatype.com/"));
+    getBundle().getFormat().convention(BundleFormat.ZIP);
+    getBundle().getArchiveFileName().convention(
+            getBundle().getFormat().map(BundleFormat::getDefaultFileName));
+    bundle.getDestinationDirectory().convention(objects.directoryProperty());
   }
 
   /**
    * Returns AUTOMATIC or USER_MANAGED (default: AUTOMATIC).
+   *
    * @return the publishing type
    */
   public abstract Property<PublishingType> getPublishingType();
 
   /**
    * Returns the Portal token credentials, defaulting to the mavenCentral Gradle credentials.
+   *
    * @return the token credentials
    */
   public abstract Property<PasswordCredentials> getCredentials();
 
   /**
    * Configures explicit Portal token credentials.
+   *
    * @param action the credentials configuration
    */
   public void credentials(Action<? super PasswordCredentials> action) {
@@ -69,6 +81,7 @@ public abstract class MavenCentralExtension {
 
   /**
    * Returns the factory used to create credentials.
+   *
    * @return the object factory
    */
   @Inject
@@ -110,4 +123,64 @@ public abstract class MavenCentralExtension {
    * @return the deployment name
    */
   public abstract Property<String> getDeploymentName();
+
+  /**
+   * Returns the Maven Central bundle options.
+   *
+   * @return bundle options
+   */
+  public BundleOptions getBundle() {
+    return bundle;
+  }
+
+  /**
+   * Configures the Maven Central bundle archive.
+   */
+  public static class BundleOptions {
+
+    private final Property<BundleFormat> format;
+
+    private final Property<String> archiveFileName;
+
+    private final DirectoryProperty destinationDirectory;
+
+    private final Property<Boolean> zip64;
+
+    BundleOptions(ObjectFactory objects) {
+      format = objects.property(BundleFormat.class);
+      archiveFileName = objects.property(String.class);
+      destinationDirectory = objects.directoryProperty();
+      zip64 = objects.property(Boolean.class);
+    }
+
+    /**
+     * Returns the archive format.
+     *
+     * @return the archive format
+     */
+    public Property<BundleFormat> getFormat() {
+      return format;
+    }
+
+    /**
+     * @return the archive file name
+     */
+    public Property<String> getArchiveFileName() {
+      return archiveFileName;
+    }
+
+    /**
+     * @return the archive destination directory
+     */
+    public DirectoryProperty getDestinationDirectory() {
+      return destinationDirectory;
+    }
+
+    /**
+     * @return whether ZIP64 is enabled
+     */
+    public Property<Boolean> getZip64() {
+      return zip64;
+    }
+  }
 }
