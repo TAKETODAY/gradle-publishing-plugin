@@ -93,11 +93,8 @@ public abstract class MavenCentralUploadTask extends DefaultTask {
   public void run() throws Exception {
     File bundleFile = getBundleFile().get().getAsFile();
     String deploymentName = configuration.getDeploymentName().get();
-    String publishingType = configuration.getPublishingType().get();
-    if (!publishingType.equals("AUTOMATIC") && !publishingType.equals("USER_MANAGED")) {
-      throw new IllegalArgumentException("publishingType must be AUTOMATIC or USER_MANAGED");
-    }
-    boolean isPublish = publishingType.equals("AUTOMATIC");
+    PublishingType publishingType = configuration.getPublishingType().get();
+    boolean isPublish = publishingType == PublishingType.AUTOMATIC;
     boolean waitUntilFullyPublished = configuration.getWaitUntilFullyPublished().get();
     Duration statusRequestInterval = configuration.getStatusRequestInterval().get();
     int maxStatusRetries = configuration.getMaxStatusRetries().get();
@@ -110,7 +107,7 @@ public abstract class MavenCentralUploadTask extends DefaultTask {
     File deploymentIdFile = getDeploymentIdFile().get().getAsFile();
 
     var publisherApi = new MavenCentralPublisherAPI(configuration.getBaseUrl().get(),
-            configuration.getUsername().get(), configuration.getPassword().get());
+            configuration.getCredentials().get());
     String deploymentId = publisherApi.upload(bundleFile, deploymentName, publishingType);
     Files.writeString(deploymentIdFile.toPath(), deploymentId);
 

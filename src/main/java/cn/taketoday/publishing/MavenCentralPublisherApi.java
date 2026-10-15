@@ -51,7 +51,7 @@ final class MavenCentralPublisherAPI {
             .build();
   }
 
-  public String upload(File bundleFile, String deploymentName, String publishingType) {
+  public String upload(File bundleFile, String deploymentName, PublishingType publishingType) {
     String query = "?name=" + deploymentName + "&publishingType=" + publishingType;
     MultiValueMap<String, Resource> files = MultiValueMap.forLinkedHashMap();
     files.add("bundle", new FileSystemResource(bundleFile));

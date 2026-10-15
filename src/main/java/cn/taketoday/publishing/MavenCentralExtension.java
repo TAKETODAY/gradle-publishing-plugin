@@ -17,6 +17,11 @@
 package cn.taketoday.publishing;
 
 import org.gradle.api.provider.Property;
+import org.gradle.api.Action;
+import org.gradle.api.credentials.PasswordCredentials;
+import org.gradle.api.model.ObjectFactory;
+
+import javax.inject.Inject;
 
 import java.net.URI;
 import java.time.Duration;
@@ -33,7 +38,7 @@ public abstract class MavenCentralExtension {
    * Creates Maven Central publishing options.
    */
   public MavenCentralExtension() {
-    getPublishingType().convention("AUTOMATIC");
+    getPublishingType().convention(PublishingType.AUTOMATIC);
     getWaitUntilFullyPublished().convention(false);
     getStatusRequestInterval().convention(Duration.ofSeconds(1));
     getMaxStatusRetries().convention(3);
@@ -44,19 +49,30 @@ public abstract class MavenCentralExtension {
    * Returns AUTOMATIC or USER_MANAGED (default: AUTOMATIC).
    * @return the publishing type
    */
-  public abstract Property<String> getPublishingType();
+  public abstract Property<PublishingType> getPublishingType();
 
   /**
-   * Returns the Portal token username, defaulting to mavenCentralUsername.
-   * @return the token username
+   * Returns the Portal token credentials, defaulting to the mavenCentral Gradle credentials.
+   * @return the token credentials
    */
-  public abstract Property<String> getUsername();
+  public abstract Property<PasswordCredentials> getCredentials();
 
   /**
-   * Returns the Portal token password, defaulting to mavenCentralPassword.
-   * @return the token password
+   * Configures explicit Portal token credentials.
+   * @param action the credentials configuration
    */
-  public abstract Property<String> getPassword();
+  public void credentials(Action<? super PasswordCredentials> action) {
+    PasswordCredentials credentials = getObjects().newInstance(PasswordCredentials.class);
+    action.execute(credentials);
+    getCredentials().set(credentials);
+  }
+
+  /**
+   * Returns the factory used to create credentials.
+   * @return the object factory
+   */
+  @Inject
+  protected abstract ObjectFactory getObjects();
 
   /**
    * Returns whether to wait for PUBLISHED instead of PUBLISHING (default: false).

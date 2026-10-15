@@ -11,12 +11,15 @@
 
 ```groovy
 import java.time.Duration
+import cn.taketoday.publishing.PublishingType
 
 mavenCentral {
   // 默认读取 mavenCentralUsername / mavenCentralPassword，也可映射其他属性
-  username = providers.gradleProperty('myCentralUsername')
-  password = providers.gradleProperty('myCentralPassword')
-  publishingType = 'AUTOMATIC'
+  credentials {
+    username = providers.gradleProperty('myCentralUsername').get()
+    password = providers.gradleProperty('myCentralPassword').get()
+  }
+  publishingType = PublishingType.AUTOMATIC
   waitUntilFullyPublished = true
   statusRequestInterval = Duration.ofSeconds(3)
   maxStatusRetries = 3
@@ -28,8 +31,7 @@ mavenCentral {
 | 选项                      | 默认值                          | 说明                                                                             |
 |---------------------------|---------------------------------|----------------------------------------------------------------------------------|
 | `publishingType`          | `AUTOMATIC`                     | `AUTOMATIC` 自动发布；`USER_MANAGED` 校验后等待手动发布                          |
-| `username`                | 项目属性 `mavenCentralUsername` | Portal 用户令牌用户名                                                            |
-| `password`                | 项目属性 `mavenCentralPassword` | Portal 用户令牌密码                                                              |
+| `credentials`             | Gradle 凭据 `mavenCentral`      | `PasswordCredentials`，默认读取 `mavenCentralUsername` / `mavenCentralPassword`  |
 | `waitUntilFullyPublished` | `false`                         | `true` 时等待 `PUBLISHED`；默认到 `PUBLISHING` 即完成。`USER_MANAGED` 时忽略此项 |
 | `statusRequestInterval`   | 1 秒                            | 状态轮询及失败重试间隔，至少 1 毫秒                                              |
 | `maxStatusRetries`        | `3`                             | 状态请求连续失败后的重试次数；`0` 表示不重试，成功请求后计数重置                 |
@@ -37,8 +39,9 @@ mavenCentral {
 | `deploymentName`          | `group:name:version`            | 部署名称                                                                         |
 
 所有发布选项统一通过 `mavenCentral {}` 配置，上传任务直接使用该扩展，不再提供独立的任务级发布配置。
-凭据默认通过以下 Gradle 项目属性提供；配置块中的 `username`、`password` 可覆盖默认值，
-支持字符串或 Provider，也可使用 `providers.environmentVariable('MY_CENTRAL_USERNAME')` 映射环境变量。
+凭据默认通过以下 Gradle 项目属性提供；`credentials {}` 可覆盖默认值，也可以将已有的
+`PasswordCredentials` 对象或 `Provider<PasswordCredentials>` 设置到 `credentials` 属性。
+环境变量可通过 `providers.environmentVariable('MY_CENTRAL_USERNAME').get()` 读取。
 
 #### 发布模式
 
@@ -48,7 +51,7 @@ mavenCentral {
 - `USER_MANAGED`：校验通过后进入 `VALIDATED`，由用户在 Portal 或调用发布 API 确认发布。
 
 发布模式统一使用 `publishingType`。旧任务配置 `publish=true` 改为
-`publishingType='AUTOMATIC'`，`publish=false` 改为 `publishingType='USER_MANAGED'`。
+`publishingType=PublishingType.AUTOMATIC`，`publish=false` 改为 `publishingType=PublishingType.USER_MANAGED`。
 `USER_MANAGED` 模式下忽略 `waitUntilFullyPublished`，任务在 `VALIDATED` 时完成。
 
 Sonatype API 省略此参数时默认 `USER_MANAGED`；本插件为兼容现有行为默认自动发布。

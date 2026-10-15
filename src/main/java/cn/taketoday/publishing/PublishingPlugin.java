@@ -18,6 +18,7 @@ package cn.taketoday.publishing;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.credentials.PasswordCredentials;
 import org.gradle.api.file.Directory;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.publish.PublishingExtension;
@@ -56,8 +57,7 @@ public class PublishingPlugin implements Plugin<Project> {
     project.getPluginManager().apply(SigningPlugin.class);
     project.getPluginManager().apply(MavenPublishPlugin.class);
     MavenCentralExtension extension = project.getExtensions().create("mavenCentral", MavenCentralExtension.class);
-    extension.getUsername().convention(project.getProviders().gradleProperty("mavenCentralUsername"));
-    extension.getPassword().convention(project.getProviders().gradleProperty("mavenCentralPassword"));
+    extension.getCredentials().convention(project.getProviders().credentials(PasswordCredentials.class, "mavenCentral"));
     extension.getDeploymentName().convention(project.provider(() -> project.getGroup() + ":" + project.getName() + ":" + project.getVersion()));
     PublishingExtension publishingExtension = project.getExtensions().getByType(PublishingExtension.class);
     Provider<Directory> outputDirectory = project.getLayout().getBuildDirectory().dir("publishing");

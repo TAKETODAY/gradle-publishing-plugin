@@ -53,18 +53,20 @@ class MavenCentralConfigurationTests {
 
     assertThat(task.getConfiguration()).isSameAs(extension);
     assertThat(extension.getDeploymentName().get()).isEqualTo("example:" + project.getName() + ":1.2.3");
-    assertThat(extension.getPublishingType().get()).isEqualTo("AUTOMATIC");
+    assertThat(extension.getPublishingType().get()).isEqualTo(PublishingType.AUTOMATIC);
     assertThat(extension.getWaitUntilFullyPublished().get()).isFalse();
     assertThat(extension.getStatusRequestInterval().get()).isEqualTo(Duration.ofSeconds(1));
     assertThat(extension.getMaxStatusRetries().get()).isEqualTo(3);
     assertThat(extension.getBaseUrl().get()).isEqualTo(URI.create("https://central.sonatype.com/"));
 
-    extension.getUsername().set("custom-user");
-    extension.getPassword().set("custom-password");
-    assertThat(task.getConfiguration().getUsername().get()).isEqualTo("custom-user");
-    assertThat(task.getConfiguration().getPassword().get()).isEqualTo("custom-password");
-    extension.getPublishingType().set("USER_MANAGED");
-    assertThat(task.getConfiguration().getPublishingType().get()).isEqualTo("USER_MANAGED");
+    extension.credentials(credentials -> {
+      credentials.setUsername("custom-user");
+      credentials.setPassword("custom-password");
+    });
+    assertThat(task.getConfiguration().getCredentials().get().getUsername()).isEqualTo("custom-user");
+    assertThat(task.getConfiguration().getCredentials().get().getPassword()).isEqualTo("custom-password");
+    extension.getPublishingType().set(PublishingType.USER_MANAGED);
+    assertThat(task.getConfiguration().getPublishingType().get()).isEqualTo(PublishingType.USER_MANAGED);
     extension.getWaitUntilFullyPublished().set(true);
     extension.getStatusRequestInterval().set(Duration.ofSeconds(5));
     extension.getMaxStatusRetries().set(7);
@@ -129,8 +131,10 @@ class MavenCentralConfigurationTests {
     Project project = ProjectBuilder.builder().withProjectDir(directory.toFile()).build();
     var configuration = project.getObjects().newInstance(MavenCentralExtension.class);
     var task = project.getTasks().register("upload", MavenCentralUploadTask.class, configuration).get();
-    configuration.getUsername().set("test-user");
-    configuration.getPassword().set("test-password");
+    configuration.credentials(credentials -> {
+      credentials.setUsername("test-user");
+      credentials.setPassword("test-password");
+    });
     task.getBundleFile().set(Files.write(directory.resolve("bundle.zip"), new byte[] { 1 }).toFile());
     configuration.getDeploymentName().set("test-deployment");
     task.getDeploymentIdFile().set(directory.resolve("deployment-id.txt").toFile());
