@@ -56,6 +56,10 @@ public class PublishingPlugin implements Plugin<Project> {
   public void apply(Project project) {
     project.getPluginManager().apply(SigningPlugin.class);
     project.getPluginManager().apply(MavenPublishPlugin.class);
+    MavenCentralExtension extension = project.getExtensions().create("mavenCentral", MavenCentralExtension.class);
+    extension.getUsername().convention(project.getProviders().gradleProperty("mavenCentralUsername"));
+    extension.getPassword().convention(project.getProviders().gradleProperty("mavenCentralPassword"));
+    extension.getDeploymentName().convention(project.provider(() -> project.getGroup() + ":" + project.getName() + ":" + project.getVersion()));
     PublishingExtension publishingExtension = project.getExtensions().getByType(PublishingExtension.class);
     Provider<Directory> outputDirectory = project.getLayout().getBuildDirectory().dir("publishing");
     Provider<Directory> stagingRepositoryDirectory = outputDirectory.map(it -> it.dir("staging-repository"));
@@ -66,7 +70,7 @@ public class PublishingPlugin implements Plugin<Project> {
 
     TaskProvider<Delete> cleanStagingRepositoryTask = registerCleanStagingRepositoryTask(project, stagingRepositoryDirectory);
     TaskProvider<Zip> bundleTask = registerBundleTask(project, stagingRepositoryDirectory, outputDirectory);
-    TaskProvider<MavenCentralUploadTask> uploadBundleTask = registerUploadBundleTask(project, bundleTask, outputDirectory);
+    TaskProvider<MavenCentralUploadTask> uploadBundleTask = registerUploadBundleTask(project, bundleTask, outputDirectory, extension);
     publishingExtension.getPublications().withType(MavenPublication.class).all(publication -> {
       String publicationName = publication.getName();
       TaskProvider<?> publishToStagingRepositoryTask = getPublishToStagingRepositoryTask(project, publicationName);
@@ -97,13 +101,25 @@ public class PublishingPlugin implements Plugin<Project> {
     });
   }
 
-  private TaskProvider<MavenCentralUploadTask> registerUploadBundleTask(Project project, TaskProvider<Zip> bundleTask, Provider<Directory> outputDirectory) {
+  private TaskProvider<MavenCentralUploadTask> registerUploadBundleTask(Project project, TaskProvider<Zip> bundleTask,
+          Provider<Directory> outputDirectory, MavenCentralExtension extension) {
     return project.getTasks().register("uploadMavenCentralBundle", MavenCentralUploadTask.class, task -> {
       task.setGroup(PUBLISH_TASK_GROUP);
       task.setDescription("Uploads, validates and publishes the '" + bundleTask.getName() + "' to Maven Central.");
       task.getBundleFile().set(bundleTask.flatMap(Zip::getArchiveFile));
-      task.getDeploymentName().set(project.provider(() -> project.getGroup() + ":" + project.getName() + ":" + project.getVersion()));
-      task.getCredentials().set(project.getProviders().credentials(PasswordCredentials.class, "mavenCentral"));
+      task.getDeploymentName().convention(extension.getDeploymentName());
+      task.getBaseUrl().convention(extension.getBaseUrl());
+      task.getPublishingType().convention(extension.getPublishingType());
+      task.getWaitUntilFullyPublished().convention(extension.getWaitUntilFullyPublished());
+      task.getStatusRequestInterval().convention(extension.getStatusRequestInterval());
+      task.getMaxStatusRetries().convention(extension.getMaxStatusRetries());
+      var objects = project.getObjects();
+      task.getCredentials().convention(extension.getUsername().zip(extension.getPassword(), (username, password) -> {
+        PasswordCredentials credentials = objects.newInstance(PasswordCredentials.class);
+        credentials.setUsername(username);
+        credentials.setPassword(password);
+        return credentials;
+      }));
       task.getDeploymentIdFile().set(outputDirectory.map(it -> it.file("deployment-id.txt")));
     });
   }

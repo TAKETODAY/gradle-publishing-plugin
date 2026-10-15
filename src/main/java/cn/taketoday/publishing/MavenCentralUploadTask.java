@@ -80,12 +80,11 @@ public abstract class MavenCentralUploadTask extends DefaultTask {
   public abstract Property<URI> getBaseUrl();
 
   /**
-   * Returns whether the deployment should be published after validation.
-   *
-   * @return {@code true} to publish the deployment
+   * Returns AUTOMATIC or USER_MANAGED (default: AUTOMATIC).
+   * @return the publishing type
    */
   @Input
-  public abstract Property<Boolean> getPublish();
+  public abstract Property<String> getPublishingType();
 
   /**
    * Returns whether the task should wait until the deployment is fully published.
@@ -104,6 +103,15 @@ public abstract class MavenCentralUploadTask extends DefaultTask {
   public abstract Property<Duration> getStatusRequestInterval();
 
   /**
+   * Returns the number of retries allowed after consecutive status request failures.
+   * A successful request resets the failure count. Defaults to three.
+   *
+   * @return the nonnegative retry limit; zero disables retries
+   */
+  @Internal
+  public abstract Property<Integer> getMaxStatusRetries();
+
+  /**
    * Returns the file in which the Maven Central deployment ID is written.
    *
    * @return the deployment ID output file
@@ -116,9 +124,10 @@ public abstract class MavenCentralUploadTask extends DefaultTask {
    */
   public MavenCentralUploadTask() {
     getBaseUrl().convention(URI.create("https://central.sonatype.com/"));
-    getPublish().convention(true);
+    getPublishingType().convention("AUTOMATIC");
     getWaitUntilFullyPublished().convention(false);
     getStatusRequestInterval().convention(Duration.ofSeconds(1));
+    getMaxStatusRetries().convention(3);
   }
 
   /**
@@ -131,13 +140,24 @@ public abstract class MavenCentralUploadTask extends DefaultTask {
     File bundleFile = getBundleFile().get().getAsFile();
     String deploymentName = getDeploymentName().get();
     PasswordCredentials credentials = getCredentials().get();
-    boolean isPublish = getPublish().get();
+    String publishingType = getPublishingType().get();
+    if (!publishingType.equals("AUTOMATIC") && !publishingType.equals("USER_MANAGED")) {
+      throw new IllegalArgumentException("publishingType must be AUTOMATIC or USER_MANAGED");
+    }
+    boolean isPublish = publishingType.equals("AUTOMATIC");
     boolean waitUntilFullyPublished = getWaitUntilFullyPublished().get();
     Duration statusRequestInterval = getStatusRequestInterval().get();
+    int maxStatusRetries = getMaxStatusRetries().get();
+    if (maxStatusRetries < 0) {
+      throw new IllegalArgumentException("maxStatusRetries must be nonnegative");
+    }
+    if (statusRequestInterval.isNegative() || statusRequestInterval.toMillis() == 0) {
+      throw new IllegalArgumentException("statusRequestInterval must be at least one millisecond");
+    }
     File deploymentIdFile = getDeploymentIdFile().get().getAsFile();
 
     var publisherApi = new MavenCentralPublisherAPI(getBaseUrl().get(), credentials);
-    String deploymentId = publisherApi.upload(bundleFile, deploymentName, isPublish);
+    String deploymentId = publisherApi.upload(bundleFile, deploymentName, publishingType);
     Files.writeString(deploymentIdFile.toPath(), deploymentId);
 
     String message = "maven central deployment id: " + deploymentId;
@@ -153,7 +173,7 @@ public abstract class MavenCentralUploadTask extends DefaultTask {
         status = publisherApi.getStatus(deploymentId);
       }
       catch (IllegalStateException e) {
-        if (++errorCount > 3) {
+        if (++errorCount > maxStatusRetries) {
           throw e;
         }
         getLogger().lifecycle(message + ", state request failed for " + errorCount + " times, treating as temporary error: " + e.getMessage());

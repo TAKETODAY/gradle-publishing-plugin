@@ -100,7 +100,7 @@ class MavenCentralPublisherAPITests {
       var api = new MavenCentralPublisherAPI(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/"), credentials);
       Path bundle = Files.write(directory.resolve("bundle.zip"), new byte[] { 1, 2, 3 });
 
-      assertThat(api.upload(bundle.toFile(), "test-deployment", true)).isEqualTo("deployment-id");
+      assertThat(api.upload(bundle.toFile(), "test-deployment", "AUTOMATIC")).isEqualTo("deployment-id");
     }
     finally {
       server.stop(0);
