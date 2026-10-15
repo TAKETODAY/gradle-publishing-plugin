@@ -25,18 +25,18 @@ mavenCentral {
 }
 ```
 
-| 选项                      | 默认值                          | 说明                                                                              |
-|---------------------------|---------------------------------|-----------------------------------------------------------------------------------|
-| `publishingType` | `AUTOMATIC` | `AUTOMATIC` 自动发布；`USER_MANAGED` 校验后等待手动发布 |
-| `username` | 项目属性 `mavenCentralUsername` | Portal 用户令牌用户名 |
-| `password` | 项目属性 `mavenCentralPassword` | Portal 用户令牌密码 |
-| `waitUntilFullyPublished` | `false` | `true` 时等待 `PUBLISHED`；默认到 `PUBLISHING` 即完成。`USER_MANAGED` 时忽略此项 |
-| `statusRequestInterval`   | 1 秒                            | 状态轮询及失败重试间隔，至少 1 毫秒                                               |
-| `maxStatusRetries`        | `3`                             | 状态请求连续失败后的重试次数；`0` 表示不重试，成功请求后计数重置                  |
-| `baseUrl`                 | `https://central.sonatype.com/` | Publisher API 基础地址                                                            |
-| `deploymentName`          | `group:name:version`            | 部署名称                                                                          |
+| 选项                      | 默认值                          | 说明                                                                             |
+|---------------------------|---------------------------------|----------------------------------------------------------------------------------|
+| `publishingType`          | `AUTOMATIC`                     | `AUTOMATIC` 自动发布；`USER_MANAGED` 校验后等待手动发布                          |
+| `username`                | 项目属性 `mavenCentralUsername` | Portal 用户令牌用户名                                                            |
+| `password`                | 项目属性 `mavenCentralPassword` | Portal 用户令牌密码                                                              |
+| `waitUntilFullyPublished` | `false`                         | `true` 时等待 `PUBLISHED`；默认到 `PUBLISHING` 即完成。`USER_MANAGED` 时忽略此项 |
+| `statusRequestInterval`   | 1 秒                            | 状态轮询及失败重试间隔，至少 1 毫秒                                              |
+| `maxStatusRetries`        | `3`                             | 状态请求连续失败后的重试次数；`0` 表示不重试，成功请求后计数重置                 |
+| `baseUrl`                 | `https://central.sonatype.com/` | Publisher API 基础地址                                                           |
+| `deploymentName`          | `group:name:version`            | 部署名称                                                                         |
 
-扩展配置作为 `uploadMavenCentralBundle` 任务的默认值；直接配置任务属性时，以任务配置为准。
+所有发布选项统一通过 `mavenCentral {}` 配置，上传任务直接使用该扩展，不再提供独立的任务级发布配置。
 凭据默认通过以下 Gradle 项目属性提供；配置块中的 `username`、`password` 可覆盖默认值，
 支持字符串或 Provider，也可使用 `providers.environmentVariable('MY_CENTRAL_USERNAME')` 映射环境变量。
 

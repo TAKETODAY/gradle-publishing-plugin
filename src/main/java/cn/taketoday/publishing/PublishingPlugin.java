@@ -18,7 +18,6 @@ package cn.taketoday.publishing;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.credentials.PasswordCredentials;
 import org.gradle.api.file.Directory;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.publish.PublishingExtension;
@@ -103,25 +102,14 @@ public class PublishingPlugin implements Plugin<Project> {
 
   private TaskProvider<MavenCentralUploadTask> registerUploadBundleTask(Project project, TaskProvider<Zip> bundleTask,
           Provider<Directory> outputDirectory, MavenCentralExtension extension) {
-    return project.getTasks().register("uploadMavenCentralBundle", MavenCentralUploadTask.class, task -> {
+    TaskProvider<MavenCentralUploadTask> uploadTask = project.getTasks().register("uploadMavenCentralBundle", MavenCentralUploadTask.class, extension);
+    uploadTask.configure(task -> {
       task.setGroup(PUBLISH_TASK_GROUP);
       task.setDescription("Uploads, validates and publishes the '" + bundleTask.getName() + "' to Maven Central.");
       task.getBundleFile().set(bundleTask.flatMap(Zip::getArchiveFile));
-      task.getDeploymentName().convention(extension.getDeploymentName());
-      task.getBaseUrl().convention(extension.getBaseUrl());
-      task.getPublishingType().convention(extension.getPublishingType());
-      task.getWaitUntilFullyPublished().convention(extension.getWaitUntilFullyPublished());
-      task.getStatusRequestInterval().convention(extension.getStatusRequestInterval());
-      task.getMaxStatusRetries().convention(extension.getMaxStatusRetries());
-      var objects = project.getObjects();
-      task.getCredentials().convention(extension.getUsername().zip(extension.getPassword(), (username, password) -> {
-        PasswordCredentials credentials = objects.newInstance(PasswordCredentials.class);
-        credentials.setUsername(username);
-        credentials.setPassword(password);
-        return credentials;
-      }));
       task.getDeploymentIdFile().set(outputDirectory.map(it -> it.file("deployment-id.txt")));
     });
+    return uploadTask;
   }
 
   private TaskProvider<?> getPublishToStagingRepositoryTask(Project project, String publicationName) {

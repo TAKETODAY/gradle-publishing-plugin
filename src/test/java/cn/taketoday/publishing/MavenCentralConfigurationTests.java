@@ -19,7 +19,6 @@ package cn.taketoday.publishing;
 import com.sun.net.httpserver.HttpServer;
 
 import org.gradle.api.Project;
-import org.gradle.api.credentials.PasswordCredentials;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -44,7 +43,7 @@ class MavenCentralConfigurationTests {
   Path directory;
 
   @Test
-  void extensionProvidesLazyDefaultsAndAllowsTaskOverrides() {
+  void taskUsesSharedExtensionAsOnlyConfiguration() {
     Project project = ProjectBuilder.builder().withProjectDir(directory.toFile()).build();
     project.getPluginManager().apply(PublishingPlugin.class);
     var extension = project.getExtensions().getByType(MavenCentralExtension.class);
@@ -52,35 +51,31 @@ class MavenCentralConfigurationTests {
     project.setGroup("example");
     project.setVersion("1.2.3");
 
-    assertThat(task.getDeploymentName().get()).isEqualTo("example:" + project.getName() + ":1.2.3");
-    assertThat(task.getPublishingType().get()).isEqualTo("AUTOMATIC");
-    assertThat(task.getWaitUntilFullyPublished().get()).isFalse();
-    assertThat(task.getStatusRequestInterval().get()).isEqualTo(Duration.ofSeconds(1));
-    assertThat(task.getMaxStatusRetries().get()).isEqualTo(3);
-    assertThat(task.getBaseUrl().get()).isEqualTo(URI.create("https://central.sonatype.com/"));
+    assertThat(task.getConfiguration()).isSameAs(extension);
+    assertThat(extension.getDeploymentName().get()).isEqualTo("example:" + project.getName() + ":1.2.3");
+    assertThat(extension.getPublishingType().get()).isEqualTo("AUTOMATIC");
+    assertThat(extension.getWaitUntilFullyPublished().get()).isFalse();
+    assertThat(extension.getStatusRequestInterval().get()).isEqualTo(Duration.ofSeconds(1));
+    assertThat(extension.getMaxStatusRetries().get()).isEqualTo(3);
+    assertThat(extension.getBaseUrl().get()).isEqualTo(URI.create("https://central.sonatype.com/"));
 
     extension.getUsername().set("custom-user");
     extension.getPassword().set("custom-password");
-    assertThat(task.getCredentials().get().getUsername()).isEqualTo("custom-user");
-    assertThat(task.getCredentials().get().getPassword()).isEqualTo("custom-password");
+    assertThat(task.getConfiguration().getUsername().get()).isEqualTo("custom-user");
+    assertThat(task.getConfiguration().getPassword().get()).isEqualTo("custom-password");
     extension.getPublishingType().set("USER_MANAGED");
-    assertThat(task.getPublishingType().get()).isEqualTo("USER_MANAGED");
+    assertThat(task.getConfiguration().getPublishingType().get()).isEqualTo("USER_MANAGED");
     extension.getWaitUntilFullyPublished().set(true);
     extension.getStatusRequestInterval().set(Duration.ofSeconds(5));
     extension.getMaxStatusRetries().set(7);
     extension.getBaseUrl().set(URI.create("https://example.test/"));
     extension.getDeploymentName().set("custom-deployment");
 
-    assertThat(task.getPublishingType().get()).isEqualTo("USER_MANAGED");
-    assertThat(task.getWaitUntilFullyPublished().get()).isTrue();
-    assertThat(task.getStatusRequestInterval().get()).isEqualTo(Duration.ofSeconds(5));
-    assertThat(task.getMaxStatusRetries().get()).isEqualTo(7);
-    assertThat(task.getBaseUrl().get()).isEqualTo(URI.create("https://example.test/"));
-    assertThat(task.getDeploymentName().get()).isEqualTo("custom-deployment");
-
-    task.getMaxStatusRetries().set(1);
-    extension.getMaxStatusRetries().set(9);
-    assertThat(task.getMaxStatusRetries().get()).isEqualTo(1);
+    assertThat(task.getConfiguration().getWaitUntilFullyPublished().get()).isTrue();
+    assertThat(task.getConfiguration().getStatusRequestInterval().get()).isEqualTo(Duration.ofSeconds(5));
+    assertThat(task.getConfiguration().getMaxStatusRetries().get()).isEqualTo(7);
+    assertThat(task.getConfiguration().getBaseUrl().get()).isEqualTo(URI.create("https://example.test/"));
+    assertThat(task.getConfiguration().getDeploymentName().get()).isEqualTo("custom-deployment");
   }
 
   @ParameterizedTest
@@ -90,7 +85,7 @@ class MavenCentralConfigurationTests {
     HttpServer server = server(requests, false);
     try {
       MavenCentralUploadTask task = uploadTask(server);
-      task.getMaxStatusRetries().set(retries);
+      task.getConfiguration().getMaxStatusRetries().set(retries);
 
       assertThatIllegalStateException().isThrownBy(task::run).withMessageContaining("503");
       assertThat(requests.get()).isEqualTo(retries + 1);
@@ -106,8 +101,8 @@ class MavenCentralConfigurationTests {
     HttpServer server = server(requests, true);
     try {
       MavenCentralUploadTask task = uploadTask(server);
-      task.getMaxStatusRetries().set(1);
-      task.getWaitUntilFullyPublished().set(true);
+      task.getConfiguration().getMaxStatusRetries().set(1);
+      task.getConfiguration().getWaitUntilFullyPublished().set(true);
 
       task.run();
 
@@ -122,27 +117,26 @@ class MavenCentralConfigurationTests {
   @Test
   void invalidPollingOptionsFailBeforeUploading() throws Exception {
     MavenCentralUploadTask task = uploadTask(null);
-    task.getMaxStatusRetries().set(-1);
+    task.getConfiguration().getMaxStatusRetries().set(-1);
     assertThatIllegalArgumentException().isThrownBy(task::run).withMessageContaining("maxStatusRetries");
 
-    task.getMaxStatusRetries().set(0);
-    task.getStatusRequestInterval().set(Duration.ZERO);
+    task.getConfiguration().getMaxStatusRetries().set(0);
+    task.getConfiguration().getStatusRequestInterval().set(Duration.ZERO);
     assertThatIllegalArgumentException().isThrownBy(task::run).withMessageContaining("statusRequestInterval");
   }
 
   private MavenCentralUploadTask uploadTask(HttpServer server) throws Exception {
     Project project = ProjectBuilder.builder().withProjectDir(directory.toFile()).build();
-    var task = project.getTasks().register("upload", MavenCentralUploadTask.class).get();
-    PasswordCredentials credentials = project.getObjects().newInstance(PasswordCredentials.class);
-    credentials.setUsername("test-user");
-    credentials.setPassword("test-password");
-    task.getCredentials().set(credentials);
+    var configuration = project.getObjects().newInstance(MavenCentralExtension.class);
+    var task = project.getTasks().register("upload", MavenCentralUploadTask.class, configuration).get();
+    configuration.getUsername().set("test-user");
+    configuration.getPassword().set("test-password");
     task.getBundleFile().set(Files.write(directory.resolve("bundle.zip"), new byte[] { 1 }).toFile());
-    task.getDeploymentName().set("test-deployment");
+    configuration.getDeploymentName().set("test-deployment");
     task.getDeploymentIdFile().set(directory.resolve("deployment-id.txt").toFile());
-    task.getStatusRequestInterval().set(Duration.ofMillis(1));
+    configuration.getStatusRequestInterval().set(Duration.ofMillis(1));
     if (server != null) {
-      task.getBaseUrl().set(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/"));
+      configuration.getBaseUrl().set(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/"));
     }
     return task;
   }
