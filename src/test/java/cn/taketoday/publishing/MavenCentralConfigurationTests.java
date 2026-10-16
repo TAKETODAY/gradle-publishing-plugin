@@ -61,7 +61,7 @@ class MavenCentralConfigurationTests {
     assertThat(extension.getWaitUntilFullyPublished().get()).isFalse();
     assertThat(extension.getStatusRequestInterval().get()).isEqualTo(Duration.ofSeconds(1));
     assertThat(extension.getMaxStatusRetries().get()).isEqualTo(3);
-    assertThat(extension.getMaxDeploymentWait().get()).isEqualTo(Duration.ofMinutes(30));
+    assertThat(extension.getMaxDeploymentWait().get()).isEqualTo(Duration.ofMinutes(60));
     assertThat(extension.getBaseUrl().get()).isEqualTo(URI.create("https://central.sonatype.com/"));
 
     extension.credentials(credentials -> {
