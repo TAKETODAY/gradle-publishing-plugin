@@ -132,14 +132,12 @@ public class PublishingPlugin implements Plugin<Project> {
       repository.setName(STAGING_REPOSITORY_NAME);
       repository.setUrl(project.uri(stagingRepositoryDirectory));
     });
-    if (project == project.getRootProject()) {
-      project.getGradle().projectsEvaluated(gradle -> {
-        if (!stagingRepository.getUrl().equals(project.uri(stagingRepositoryDirectory))) {
-          throw new GradleException("Repository '" + STAGING_REPOSITORY_NAME
-                  + "' is managed by 'cn.taketoday.publishing'; its URL must not be changed.");
-        }
-      });
-    }
+    project.getGradle().projectsEvaluated(gradle -> {
+      if (!stagingRepository.getUrl().equals(project.uri(stagingRepositoryDirectory))) {
+        throw new GradleException("Repository '" + STAGING_REPOSITORY_NAME
+                + "' is managed by 'cn.taketoday.publishing'; its URL must not be changed.");
+      }
+    });
   }
 
   /**
