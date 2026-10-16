@@ -70,7 +70,7 @@ class PublishingPluginTests {
     publishing.getPublications().create("library", MavenPublication.class);
     publishing.getPublications().create("platform", MavenPublication.class);
     Task upload = task("uploadMavenCentralBundle");
-    Task bundle = task("mavenCentralBundle");
+    Task stagingAll = task("publishAllPublicationsToMavenCentralStagingRepository");
     for (String name : new String[] { "Library", "Platform" }) {
       Task staging = task("publish" + name + "PublicationToMavenCentralStagingRepository");
       Task publish = task("publish" + name + "PublicationToMavenCentral");
@@ -78,11 +78,12 @@ class PublishingPluginTests {
               .contains(staging.getName(), upload.getName());
       assertThat(staging.getTaskDependencies().getDependencies(staging))
               .extracting(Task::getName).contains("cleanMavenCentralStagingRepository");
-      assertThat(bundle.getMustRunAfter().getDependencies(bundle)).extracting(Task::getName).contains(staging.getName());
+      assertThat(stagingAll.getTaskDependencies().getDependencies(stagingAll))
+              .extracting(Task::getName).contains(staging.getName());
       for (String archiveName : new String[] { "mavenCentralZipBundle", "mavenCentralTarGzBundle" }) {
         Task archive = task(archiveName);
-        assertThat(archive.getMustRunAfter().getDependencies(archive)).extracting(Task::getName)
-                .contains(staging.getName());
+        assertThat(archive.getTaskDependencies().getDependencies(archive))
+                .extracting(Task::getName).contains(stagingAll.getName());
       }
     }
     Task publishAll = task("publishToMavenCentral");

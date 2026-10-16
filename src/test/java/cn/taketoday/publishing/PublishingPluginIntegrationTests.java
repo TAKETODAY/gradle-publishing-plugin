@@ -105,7 +105,7 @@ class PublishingPluginIntegrationTests {
     Files.createDirectories(stagingRepository);
     Files.writeString(stagingRepository.resolve("stale.txt"), "previous publication");
 
-    BuildResult result = run("publishAllPublicationsToMavenCentralStagingRepository", "mavenCentralZipBundle");
+    BuildResult result = run("mavenCentralBundle");
 
     assertThat(stagingRepository.resolve("stale.txt")).doesNotExist();
     assertThat(stagingRepository.resolve("com/example/library/1.0.0/library-1.0.0.jar")).exists();
@@ -186,7 +186,7 @@ class PublishingPluginIntegrationTests {
     Files.createDirectories(staging);
     Files.writeString(staging.resolve("stale.txt"), "previous publication");
 
-    BuildResult result = run(":publishToMavenCentral", "--parallel", "--max-workers=4");
+    BuildResult result = run(":uploadMavenCentralBundle", "--parallel", "--max-workers=4");
 
     assertThat(result.task(":cleanMavenCentralStagingRepository")).isNotNull();
     assertThat(staging.resolve("stale.txt")).doesNotExist();
@@ -205,7 +205,7 @@ class PublishingPluginIntegrationTests {
               .isLessThan(output.indexOf("> Task :" + module + ":publishMavenPublicationToMavenCentralStagingRepository"));
     }
 
-    BuildResult tarResult = run("mavenCentralTarGzBundle", ":publishToMavenCentral", "--dry-run", "--parallel");
+    BuildResult tarResult = run("mavenCentralTarGzBundle", "--dry-run", "--parallel");
     for (String module : new String[] { "library", "other" }) {
       assertThat(tarResult.getOutput().indexOf(":" + module + ":publishAllPublicationsToMavenCentralStagingRepository SKIPPED"))
               .isNotNegative()
