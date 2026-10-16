@@ -30,7 +30,6 @@ import org.gradle.api.provider.Provider;
 import org.gradle.api.publish.PublishingExtension;
 import org.gradle.api.publish.maven.MavenPublication;
 import org.gradle.api.publish.maven.plugins.MavenPublishPlugin;
-import org.gradle.api.publish.maven.tasks.PublishToMavenRepository;
 import org.gradle.api.tasks.Delete;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.bundling.AbstractArchiveTask;
@@ -109,17 +108,16 @@ public class PublishingPlugin implements Plugin<Project> {
   private void configureRootPublications(Project project, TaskProvider<MavenCentralUploadTask> uploadBundleTask,
           TaskProvider<Delete> cleanStagingRepositoryTask) {
     PublishingExtension publishing = project.getExtensions().getByType(PublishingExtension.class);
-    configurePublications(project, project, publishing, uploadBundleTask, cleanStagingRepositoryTask);
+    configurePublications(project, publishing, uploadBundleTask, cleanStagingRepositoryTask);
   }
 
-  private void configurePublications(Project publicationProject, Project archiveProject,
-          PublishingExtension publishing, TaskProvider<MavenCentralUploadTask> uploadBundleTask,
-          TaskProvider<Delete> cleanStagingRepositoryTask) {
+  private void configurePublications(Project publicationProject, PublishingExtension publishing,
+          TaskProvider<MavenCentralUploadTask> uploadBundleTask, TaskProvider<Delete> cleanStagingRepositoryTask) {
     publishing.getPublications().withType(MavenPublication.class).configureEach(publication -> {
       String publicationName = publication.getName();
       var publishToStagingRepositoryTask = getPublishToStagingRepositoryTask(publicationProject, publicationName);
       publishToStagingRepositoryTask.configure(task -> task.dependsOn(cleanStagingRepositoryTask));
-      configureArchiveOrdering(archiveProject, publishToStagingRepositoryTask);
+      configureArchiveOrdering(publicationProject, publishToStagingRepositoryTask);
       registerPublishTask(publicationProject, publicationName, publishToStagingRepositoryTask, uploadBundleTask);
     });
   }
@@ -174,13 +172,7 @@ public class PublishingPlugin implements Plugin<Project> {
                   subproject.getPath(), publishAllToStagingTaskName);
           continue;
         }
-        configurePublications(subproject, rootProject, publishingExtension, uploadBundleTask, cleanStagingRepositoryTask);
-        subproject.getTasks().withType(PublishToMavenRepository.class).configureEach(task -> {
-          if (STAGING_REPOSITORY_NAME.equals(task.getRepository().getName())) {
-            task.dependsOn(cleanStagingRepositoryTask);
-            configureArchiveOrdering(rootProject, task);
-          }
-        });
+        configurePublications(subproject, publishingExtension, uploadBundleTask, cleanStagingRepositoryTask);
         publishAllStagingTask.configure(task -> task.dependsOn(stagingTask));
         aggregatedPublishingTasks++;
         log.debug("Aggregated subproject '{}' publishing task '{}' into project '{}' publishing",
@@ -200,8 +192,9 @@ public class PublishingPlugin implements Plugin<Project> {
   }
 
   private void configureArchiveOrdering(Project project, Object stagingTask) {
-    project.getTasks().named(ZIP_BUNDLE_TASK_NAME).configure(task -> task.mustRunAfter(stagingTask));
-    project.getTasks().named(TAR_GZ_BUNDLE_TASK_NAME).configure(task -> task.mustRunAfter(stagingTask));
+    Project rootProject = project.getRootProject();
+    rootProject.getTasks().named(ZIP_BUNDLE_TASK_NAME).configure(task -> task.mustRunAfter(stagingTask));
+    rootProject.getTasks().named(TAR_GZ_BUNDLE_TASK_NAME).configure(task -> task.mustRunAfter(stagingTask));
   }
 
   private TaskProvider<DefaultTask> registerBundleTask(Project project, Provider<Directory> stagingRepositoryDirectory, MavenCentralExtension extension) {
