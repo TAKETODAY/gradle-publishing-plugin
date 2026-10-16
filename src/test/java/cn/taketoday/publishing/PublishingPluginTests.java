@@ -83,7 +83,9 @@ class PublishingPluginTests {
       for (String archiveName : new String[] { "mavenCentralZipBundle", "mavenCentralTarGzBundle" }) {
         Task archive = task(archiveName);
         assertThat(archive.getTaskDependencies().getDependencies(archive))
-                .extracting(Task::getName).contains(stagingAll.getName());
+                .extracting(Task::getName).doesNotContain(stagingAll.getName());
+        assertThat(archive.getMustRunAfter().getDependencies(archive))
+                .extracting(Task::getName).contains(staging.getName());
       }
     }
     Task publishAll = task("publishToMavenCentral");

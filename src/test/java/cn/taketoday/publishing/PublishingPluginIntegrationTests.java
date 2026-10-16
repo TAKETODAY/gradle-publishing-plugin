@@ -105,7 +105,7 @@ class PublishingPluginIntegrationTests {
     Files.createDirectories(stagingRepository);
     Files.writeString(stagingRepository.resolve("stale.txt"), "previous publication");
 
-    BuildResult result = run("mavenCentralBundle");
+    BuildResult result = run("publishAllPublicationsToMavenCentralStagingRepository", "mavenCentralBundle");
 
     assertThat(stagingRepository.resolve("stale.txt")).doesNotExist();
     assertThat(stagingRepository.resolve("com/example/library/1.0.0/library-1.0.0.jar")).exists();
@@ -180,7 +180,7 @@ class PublishingPluginIntegrationTests {
     Files.createDirectories(staging);
     Files.writeString(staging.resolve("stale.txt"), "previous publication");
 
-    BuildResult result = run(":uploadMavenCentralBundle", "--parallel", "--max-workers=4");
+    BuildResult result = run("publishToMavenCentral", "--parallel", "--max-workers=4");
 
     assertThat(result.task(":cleanMavenCentralStagingRepository")).isNotNull();
     assertThat(staging.resolve("stale.txt")).doesNotExist();
@@ -199,7 +199,7 @@ class PublishingPluginIntegrationTests {
               .isLessThan(output.indexOf("> Task :" + module + ":publishMavenPublicationToMavenCentralStagingRepository"));
     }
 
-    BuildResult tarResult = run("mavenCentralTarGzBundle", "--dry-run", "--parallel");
+    BuildResult tarResult = run("publishAllPublicationsToMavenCentralStagingRepository", "mavenCentralTarGzBundle", "--dry-run", "--parallel");
     for (String module : new String[] { "library", "other" }) {
       assertThat(tarResult.getOutput().indexOf(":" + module + ":publishAllPublicationsToMavenCentralStagingRepository SKIPPED"))
               .isNotNegative()
@@ -304,9 +304,9 @@ class PublishingPluginIntegrationTests {
               }
               """.formatted(format));
 
-      BuildResult first = run("mavenCentralBundle", "--configuration-cache", "--rerun-tasks");
+      BuildResult first = run("publishAllPublicationsToMavenCentralStagingRepository", "mavenCentralBundle", "--configuration-cache", "--rerun-tasks");
       assertThat(first.getOutput()).contains("Configuration cache entry stored");
-      BuildResult second = run("mavenCentralBundle", "--configuration-cache", "--rerun-tasks");
+      BuildResult second = run("publishAllPublicationsToMavenCentralStagingRepository", "mavenCentralBundle", "--configuration-cache", "--rerun-tasks");
       assertThat(second.getOutput()).contains("Reusing configuration cache");
       assertThat(directory.resolve("build/publishing/" + (format.equals("ZIP") ? "bundle.zip" : "bundle.tar.gz"))).exists();
       if (format.equals("ZIP")) {
@@ -314,6 +314,56 @@ class PublishingPluginIntegrationTests {
           assertThat(zip.getEntry("example/library/1.0/library-1.0.jar")).isNotNull();
         }
       }
+    }
+  }
+
+  @Test
+  void publicationEntrypointsSelectSharedBundleContents() throws IOException {
+    write("settings.gradle", "rootProject.name = 'selective'; include 'library'");
+    Files.createDirectories(directory.resolve("library"));
+    write("build.gradle", """
+            plugins { id 'cn.taketoday.publishing'; id 'java' }
+            group = 'example'
+            version = '1.0'
+            publishing {
+              publications {
+                first(MavenPublication) { artifactId = 'first'; from components.java }
+                second(MavenPublication) { artifactId = 'second'; from components.java }
+              }
+            }
+            project(':library') {
+              apply plugin: 'java'
+              apply plugin: 'maven-publish'
+              group = 'example'
+              version = '1.0'
+              publishing { publications { maven(MavenPublication) { from components.java } } }
+            }
+            tasks.named('uploadMavenCentralBundle') { enabled = false }
+            """);
+
+    BuildResult single = run("publishFirstPublicationToMavenCentral", "--parallel");
+    assertThat(single.task(":publishSecondPublicationToMavenCentralStagingRepository")).isNull();
+    assertThat(single.task(":library:publishMavenPublicationToMavenCentralStagingRepository")).isNull();
+    assertThat(single.task(":mavenCentralBundle")).isNotNull();
+    assertSharedBundle("first");
+
+    run("publishFirstPublicationToMavenCentral", "publishSecondPublicationToMavenCentral", "--parallel");
+    assertSharedBundle("first", "second");
+
+    run("publishToMavenCentral", "--parallel");
+    assertSharedBundle("first", "second", "library");
+
+    BuildResult upload = run("uploadMavenCentralBundle");
+    assertThat(upload.task(":cleanMavenCentralStagingRepository")).isNull();
+    assertThat(upload.task(":publishFirstPublicationToMavenCentralStagingRepository")).isNull();
+    assertSharedBundle("first", "second", "library");
+  }
+
+  private void assertSharedBundle(String... modules) throws IOException {
+    try (ZipFile zip = new ZipFile(directory.resolve("build/publishing/bundle.zip").toFile())) {
+      assertThat(zip.stream().map(entry -> entry.getName()).filter(name -> name.endsWith(".jar")))
+              .containsExactlyInAnyOrder(java.util.Arrays.stream(modules)
+                      .map(module -> "example/" + module + "/1.0/" + module + "-1.0.jar").toArray(String[]::new));
     }
   }
 

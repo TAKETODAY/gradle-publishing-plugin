@@ -128,6 +128,47 @@ mavenCentralPassword=<令牌密码>
 本次任务图中所有聚合的 staging 发布任务完成，支持使用 `--parallel` 并行构建。
 本地打包支持配置缓存，执行 `mavenCentralBundle --configuration-cache` 无需提供上传凭据。
 
+发布入口决定本次暂存的内容：`publishToMavenCentral` 暂存全部 publication（含子模块），
+`publish<Publication>PublicationToMavenCentral` 只暂存根项目指定的 publication。
+多个单 publication 入口在同一次构建中执行时，它们的构件合并到同一个 bundle，并上传一次。
+这些入口共用 `uploadMavenCentralBundle → mavenCentralBundle → ZIP/TAR.GZ` 任务链；
+归档任务通过排序约束等待本次任务图中的暂存发布完成，不会自动触发其他暂存发布。
+
+任务依赖关系如下（子节点是父节点的 `dependsOn` 前置依赖，不表示同级任务的执行顺序）：
+
+```plain text
+publish
+├─ 其他仓库发布任务
+└─ publishToMavenCentral
+   ├─ publishAllPublicationsToMavenCentralStagingRepository
+   │  ├─ publishX1PublicationToMavenCentralStagingRepository
+   │  │  └─ cleanMavenCentralStagingRepository
+   │  ├─ publishX2PublicationToMavenCentralStagingRepository
+   │  │  └─ cleanMavenCentralStagingRepository
+   │  └─ 各子项目的全量暂存发布任务
+   │     └─ 子项目各 publication 暂存任务
+   │        └─ cleanMavenCentralStagingRepository
+   └─ uploadMavenCentralBundle
+      └─ mavenCentralBundle
+         ├─ mavenCentralTarGzBundle
+         └─ mavenCentralZipBundle
+
+publishX1PublicationToMavenCentral
+├─ publishX1PublicationToMavenCentralStagingRepository
+│  └─ cleanMavenCentralStagingRepository
+└─ uploadMavenCentralBundle
+   └─ mavenCentralBundle
+      ├─ mavenCentralTarGzBundle
+      └─ mavenCentralZipBundle
+```
+
+ZIP/TAR.GZ 归档任务额外通过 `mustRunAfter` 等待已加入任务图的暂存发布任务完成。
+共享清理任务在同一次构建中只执行一次；两个归档任务中仅配置选中的格式实际执行。
+
+直接执行 `mavenCentralBundle` 或 `uploadMavenCentralBundle` 会使用当前 staging 目录，
+不会清理或重新发布构件。需要先暂存再本地打包时，执行：
+`./gradlew publishAllPublicationsToMavenCentralStagingRepository mavenCentralBundle`。
+
 根项目 `build.gradle`：
 
 ```groovy
@@ -150,7 +191,7 @@ publishing {
 }
 ```
 
-`mavenCentralStaging` 仓库无需配置；如需自定义行为，子模块仍可显式声明同名仓库覆盖自动配置。
+`mavenCentralStaging` 仓库由插件统一配置，子模块无需也不允许自行声明同名仓库。
 
 ### 调试日志
 
