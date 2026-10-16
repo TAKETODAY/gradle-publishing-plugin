@@ -31,7 +31,6 @@ import infra.util.Assert;
 import infra.util.MultiValueMap;
 import infra.web.client.ClientResponse;
 import infra.web.client.RestClient;
-import infra.web.util.UriComponentsBuilder;
 
 /**
  * @author <a href="https://github.com/TAKETODAY">海子 Yang</a>
@@ -58,7 +57,7 @@ final class MavenCentralPublisherAPI {
 
     return restClient
             .post()
-            .uri(uploadUri(deploymentName, publishingType))
+            .uri("/api/v1/publisher/upload?name={name}&publishingType={publishingType}", deploymentName, publishingType)
             .body(files)
             .exchange((request, response) -> {
               assertStatus(request, response);
@@ -69,26 +68,11 @@ final class MavenCentralPublisherAPI {
   public JSONObject getStatus(String deploymentId) {
     return restClient
             .post()
-            .uri(statusUri(deploymentId))
+            .uri("/api/v1/publisher/status?id={id}", deploymentId)
             .exchange((request, response) -> {
               assertStatus(request, response);
               return new JSONObject(response.bodyTo(String.class));
             });
-  }
-
-  private static URI uploadUri(String deploymentName, PublishingType publishingType) {
-    return UriComponentsBuilder.forPath("api/v1/publisher/upload")
-            .queryParam("name", deploymentName)
-            .queryParam("publishingType", publishingType)
-            .build()
-            .toURI();
-  }
-
-  private static URI statusUri(String deploymentId) {
-    return UriComponentsBuilder.forPath("api/v1/publisher/status")
-            .queryParam("id", deploymentId)
-            .build()
-            .toURI();
   }
 
   private static void assertStatus(HttpRequest request, ClientResponse response) {
