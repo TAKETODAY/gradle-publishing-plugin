@@ -18,7 +18,6 @@ mavenCentral {
   bundle {
     format = BundleFormat.ZIP
     archiveFileName = 'bundle.zip'
-    zip64 = false
   }
   // 默认读取 mavenCentralUsername / mavenCentralPassword，也可映射其他属性
   credentials {
@@ -116,14 +115,18 @@ mavenCentralPassword=<令牌密码>
 2. 根项目应用本插件。
 
 指向根项目 `build/publishing/staging-repository` 的 `mavenCentralStaging` 仓库由根插件
-自动扫描并添加：只要子模块应用了 `maven-publish`，且未自定义同名仓库，就会被自动纳入
+自动扫描并添加：只要子模块应用了 `maven-publish`，就会被自动纳入
 聚合，无需手动配置。
+
+`mavenCentralStaging` 是插件保留仓库，由插件统一创建和配置。
+根项目和子模块都不允许自行声明同名仓库，即使指向相同目录也会在配置阶段报错。
 
 聚合在项目评估完成（`projectsEvaluated`）之后进行，因此不依赖子模块的配置顺序，
 `java-platform` 这类在根项目配置阶段尚未应用 `maven-publish` 的模块也会被正确纳入。
 
 根项目与子模块的 staging 发布任务均先执行一次共享仓库清理；ZIP/TAR.GZ 打包等待
 本次任务图中所有聚合的 staging 发布任务完成，支持使用 `--parallel` 并行构建。
+本地打包支持配置缓存，执行 `mavenCentralBundle --configuration-cache` 无需提供上传凭据。
 
 根项目 `build.gradle`：
 

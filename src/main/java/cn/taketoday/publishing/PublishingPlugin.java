@@ -94,7 +94,6 @@ public class PublishingPlugin implements Plugin<Project> {
 
     TaskProvider<Delete> cleanStagingRepositoryTask = registerCleanStagingRepositoryTask(project, stagingRepositoryDirectory);
     extension.getBundle().getDestinationDirectory().convention(outputDirectory);
-    extension.getBundle().getZip64().convention(false);
 
     TaskProvider<DefaultTask> bundleTask = registerBundleTask(project, stagingRepositoryDirectory, extension);
     TaskProvider<MavenCentralUploadTask> uploadBundleTask = registerUploadBundleTask(project, bundleTask, outputDirectory, extension);
@@ -118,17 +117,29 @@ public class PublishingPlugin implements Plugin<Project> {
 
   private void registerStagingRepository(Project project, Provider<Directory> stagingRepositoryDirectory) {
     PublishingExtension publishing = project.getExtensions().getByType(PublishingExtension.class);
-    publishing.getRepositories().maven(repository -> {
+    if (publishing.getRepositories().findByName(STAGING_REPOSITORY_NAME) != null) {
+      throw new GradleException("Repository '" + STAGING_REPOSITORY_NAME + "' in project '"
+              + project.getPath() + "' is reserved for 'cn.taketoday.publishing' and must not be configured by users.");
+    }
+    var stagingRepository = publishing.getRepositories().maven(repository -> {
       repository.setName(STAGING_REPOSITORY_NAME);
       repository.setUrl(project.uri(stagingRepositoryDirectory));
     });
+    if (project == project.getRootProject()) {
+      project.getGradle().projectsEvaluated(gradle -> {
+        if (!stagingRepository.getUrl().equals(project.uri(stagingRepositoryDirectory))) {
+          throw new GradleException("Repository '" + STAGING_REPOSITORY_NAME
+                  + "' is managed by 'cn.taketoday.publishing'; its URL must not be changed.");
+        }
+      });
+    }
   }
 
   /**
    * Aggregates subproject staging publications into the shared Maven Central bundle.
    *
-   * <p>Subprojects applying {@code maven-publish} without a dedicated
-   * {@code mavenCentralStaging} repository are configured automatically.</p>
+   * <p>The plugin owns the {@code mavenCentralStaging} repository and configures
+   * it automatically for every subproject applying {@code maven-publish}.</p>
    */
   private void aggregateSubprojects(Project rootProject, Provider<Directory> stagingRepositoryDirectory,
           TaskProvider<Delete> cleanStagingRepositoryTask) {
@@ -146,11 +157,8 @@ public class PublishingPlugin implements Plugin<Project> {
                   subproject.getPath());
           continue;
         }
-        if (publishingExtension.getRepositories().findByName(STAGING_REPOSITORY_NAME) == null) {
-          registerStagingRepository(subproject, stagingRepositoryDirectory);
-          log.debug("Auto-configured '{}' repository for subproject '{}'",
-                  STAGING_REPOSITORY_NAME, subproject.getPath());
-        }
+        registerStagingRepository(subproject, stagingRepositoryDirectory);
+        log.debug("Auto-configured '{}' repository for subproject '{}'", STAGING_REPOSITORY_NAME, subproject.getPath());
         Task stagingTask = subproject.getTasks().findByName(publishAllToStagingTaskName);
         if (stagingTask == null) {
           log.debug("Subproject '{}' has no '{}' task, skipped from aggregation",
@@ -200,12 +208,10 @@ public class PublishingPlugin implements Plugin<Project> {
       task.exclude("**/maven-metadata.xml*");
       task.getDestinationDirectory().set(extension.getBundle().getDestinationDirectory());
       task.getArchiveFileName().set(extension.getBundle().getArchiveFileName());
-      task.onlyIf(ignored -> extension.getBundle().getFormat().get() == format);
+      Provider<BundleFormat> bundleFormat = extension.getBundle().getFormat();
+      task.onlyIf(ignored -> bundleFormat.get() == format);
       if (task instanceof Tar tar) {
         tar.setCompression(Compression.GZIP);
-      }
-      else if (task instanceof Zip zip) {
-        zip.doFirst(ignored -> zip.setZip64(extension.getBundle().getZip64().get()));
       }
     });
   }

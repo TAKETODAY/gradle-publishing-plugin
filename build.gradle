@@ -102,7 +102,6 @@ mavenCentral {
   bundle {
     format = BundleFormat.ZIP
     archiveFileName = 'bundle.zip'
-    zip64 = false
   }
 
   maxStatusRetries = 5

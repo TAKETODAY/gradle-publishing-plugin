@@ -167,13 +167,10 @@ public abstract class MavenCentralExtension {
 
     private final DirectoryProperty destinationDirectory;
 
-    private final Property<Boolean> zip64;
-
     BundleOptions(ObjectFactory objects) {
       format = objects.property(BundleFormat.class);
       archiveFileName = objects.property(String.class);
       destinationDirectory = objects.directoryProperty();
-      zip64 = objects.property(Boolean.class);
     }
 
     /**
@@ -201,15 +198,6 @@ public abstract class MavenCentralExtension {
      */
     public DirectoryProperty getDestinationDirectory() {
       return destinationDirectory;
-    }
-
-    /**
-     * Returns whether ZIP64 is enabled.
-     *
-     * @return whether ZIP64 is enabled
-     */
-    public Property<Boolean> getZip64() {
-      return zip64;
     }
   }
 }

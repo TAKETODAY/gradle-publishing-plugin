@@ -127,12 +127,6 @@ class PublishingPluginIntegrationTests {
             apply plugin: 'java'
             apply plugin: 'maven-publish'
             publishing {
-              repositories {
-                maven {
-                  name = 'mavenCentralStaging'
-                  url = layout.buildDirectory.dir('publishing/staging-repository')
-                }
-              }
               publications {
                 maven(MavenPublication) {
                   from components.java
@@ -229,6 +223,98 @@ class PublishingPluginIntegrationTests {
             .buildAndFail();
 
     assertThat(result.getOutput()).contains("Apply 'cn.taketoday.publishing' only to the root project");
+  }
+
+  @Test
+  void rejectsUserDefinedSubprojectStagingRepositoryEvenWithSharedDirectory() throws IOException {
+    write("settings.gradle", "include 'library'");
+    Files.createDirectories(directory.resolve("library"));
+    write("build.gradle", """
+            plugins { id 'cn.taketoday.publishing' }
+            project(':library') {
+              apply plugin: 'maven-publish'
+              publishing {
+                repositories {
+                  maven {
+                    name = 'mavenCentralStaging'
+                    url = rootProject.layout.buildDirectory.dir('publishing/staging-repository')
+                  }
+                }
+                publications { maven(MavenPublication) { groupId = 'example'; artifactId = 'library'; version = '1.0' } }
+              }
+            }
+            """);
+
+    BuildResult result = GradleRunner.create()
+            .withProjectDir(directory.toFile())
+            .withPluginClasspath()
+            .withArguments("mavenCentralBundle", "--no-configuration-cache")
+            .buildAndFail();
+
+    assertThat(result.getOutput()).contains("mavenCentralStaging", ":library", "is reserved for");
+  }
+
+  @Test
+  void rejectsUserDefinedRootStagingRepository() throws IOException {
+    write("settings.gradle", "rootProject.name = 'reserved-repository'");
+    write("build.gradle", """
+            plugins {
+              id 'maven-publish'
+              id 'cn.taketoday.publishing' apply false
+            }
+            publishing {
+              repositories {
+                maven {
+                  name = 'mavenCentralStaging'
+                  url = layout.buildDirectory.dir('custom-staging')
+                }
+              }
+            }
+            apply plugin: 'cn.taketoday.publishing'
+            """);
+
+    BuildResult result = GradleRunner.create()
+            .withProjectDir(directory.toFile())
+            .withPluginClasspath()
+            .withArguments("help")
+            .buildAndFail();
+
+    assertThat(result.getOutput()).contains("mavenCentralStaging", "is reserved for");
+  }
+
+  @Test
+  void bundlesWithoutCredentialsAndReusesConfigurationCache() throws IOException {
+    write("settings.gradle", "rootProject.name = 'cached-bundle'; include 'library'");
+    Files.createDirectories(directory.resolve("library"));
+    for (String format : new String[] { "ZIP", "TAR_GZ" }) {
+      write("build.gradle", """
+              plugins { id 'cn.taketoday.publishing' }
+              mavenCentral {
+                bundle { format = cn.taketoday.publishing.BundleFormat.%s }
+                credentials = providers.provider { throw new GradleException('Credentials must not be resolved for bundling') }
+              }
+              project(':library') {
+                apply plugin: 'java'
+                apply plugin: 'maven-publish'
+                group = 'example'
+                version = '1.0'
+                publishing {
+                  publications { maven(MavenPublication) { from components.java } }
+                }
+              }
+              """.formatted(format));
+
+      BuildResult first = run("mavenCentralBundle", "--configuration-cache", "--rerun-tasks");
+      assertThat(first.getOutput()).contains("Configuration cache entry stored");
+      BuildResult second = run("mavenCentralBundle", "--configuration-cache", "--rerun-tasks");
+      assertThat(second.getOutput()).contains("Reusing configuration cache");
+      assertThat(directory.resolve("build/publishing/" + (format.equals("ZIP") ? "bundle.zip" : "bundle.tar.gz"))).exists();
+      if (format.equals("ZIP")) {
+        try (ZipFile zip = new ZipFile(directory.resolve("build/publishing/bundle.zip").toFile())) {
+          assertThat(zip.getEntry("example/library/1.0/library-1.0.jar")).isNotNull();
+        }
+      }
+    }
   }
 
   private void write(String name, String content) throws IOException {
