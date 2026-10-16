@@ -156,7 +156,7 @@ publishing {
 | 命令                    | 可见内容                                                         |
 |-------------------------|------------------------------------------------------------------|
 | 默认                    | 仅 Gradle 常规输出                                               |
-| `./gradlew --info ...`  | `INFO`：staging 仓库位置、聚合的子模块总数                       |
+| `./gradlew --info ...`  | `INFO`：staging 仓库位置、聚合的子模块发布任务数量                       |
 | `./gradlew --debug ...` | `DEBUG`：每个子模块的聚合/跳过细节及原因、插件应用与任务注册情况 |
 
 例如：
@@ -169,7 +169,7 @@ publishing {
 
 ```
 Maven Central publishing configured for project ':', staging at '.../build/publishing/staging-repository'
-Aggregated 90 subproject publication(s) into ':' Maven Central publishing
+Aggregated 90 subproject publishing task(s) into root project 'infra' Maven Central publishing
 ```
 
 `--debug` 时还会逐行列出每个被聚合的子模块，便于排查漏发问题。

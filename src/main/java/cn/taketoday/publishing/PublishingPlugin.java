@@ -138,7 +138,7 @@ public class PublishingPlugin implements Plugin<Project> {
     rootProject.getGradle().projectsEvaluated(gradle -> {
       String publishAllToStagingTaskName = "publishAllPublicationsTo" + capitalize(STAGING_REPOSITORY_NAME) + "Repository";
       TaskProvider<?> publishAllStagingTask = rootProject.getTasks().named(publishAllToStagingTaskName);
-      int aggregated = 0;
+      int aggregatedPublishingTasks = 0;
       for (Project subproject : rootProject.getSubprojects()) {
         PublishingExtension publishingExtension = subproject.getExtensions().findByType(PublishingExtension.class);
         if (publishingExtension == null) {
@@ -163,12 +163,12 @@ public class PublishingPlugin implements Plugin<Project> {
           }
         });
         publishAllStagingTask.configure(task -> task.dependsOn(stagingTask));
-        aggregated++;
-        log.debug("Aggregated subproject '{}' publication '{}' into project '{}' publishing",
+        aggregatedPublishingTasks++;
+        log.debug("Aggregated subproject '{}' publishing task '{}' into project '{}' publishing",
                 subproject.getPath(), stagingTask.getPath(), rootProject.getPath());
       }
-      log.info("Aggregated {} subproject publication(s) into '{}' Maven Central publishing",
-              aggregated, rootProject.getName());
+      log.info("Aggregated {} subproject publishing task(s) into root project '{}' Maven Central publishing",
+              aggregatedPublishingTasks, rootProject.getName());
     });
   }
 
