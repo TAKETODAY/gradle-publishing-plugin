@@ -33,6 +33,9 @@ public enum BundleFormat {
    */
   TAR_GZ;
 
+  /**
+   * get default name
+   */
   public String getDefaultFileName() {
     return this == ZIP ? "bundle.zip" : "bundle.tar.gz";
   }

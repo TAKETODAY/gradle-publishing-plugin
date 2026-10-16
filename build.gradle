@@ -12,7 +12,7 @@ apply plugin: "maven-publish"
 apply plugin: "java-gradle-plugin"
 
 group = 'cn.taketoday'
-description = 'Publishing Gradle plugin'
+description = 'Gradle Publishing Plugin'
 
 ext {
   isSnapshot = version.endsWith('SNAPSHOT')
@@ -39,6 +39,7 @@ dependencies {
   testImplementation 'org.junit.jupiter:junit-jupiter:5.14.1'
   testImplementation 'org.assertj:assertj-core:3.27.7'
   testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+  testImplementation gradleTestKit()
 }
 
 tasks.named('test') {

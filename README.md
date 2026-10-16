@@ -102,3 +102,66 @@ export ORG_GRADLE_PROJECT_mavenCentralPassword=<令牌密码>
 mavenCentralUsername=<令牌用户名>
 mavenCentralPassword=<令牌密码>
 ```
+
+### 多项目聚合发布
+
+在根项目应用插件后（版本 0.0.5 起），会自动聚合所有子模块的发布产物：每个子模块
+先发布到统一的 `mavenCentralStaging` 仓库，再由根项目一次性打包上传，
+执行一次 `publishToMavenCentral` 即可发布整个构建，无需在根项目手写聚合脚本。
+
+子模块不需要应用本插件，只需满足两个条件：
+
+1. 应用 `maven-publish` 插件，并配置名为 `mavenCentralStaging` 的仓库，指向根项目的
+   `build/publishing/staging-repository` 目录；
+2. 声明至少一个 `MavenPublication`（普通 `java` 或 `java-platform` 模块均可）。
+
+聚合在项目评估完成（`projectsEvaluated`）之后进行，因此不依赖子模块的配置顺序，
+`java-platform` 这类在根项目配置阶段尚未应用 `maven-publish` 的模块也会被正确纳入。
+
+根项目 `build.gradle`：
+
+```groovy
+plugins {
+  id 'cn.taketoday.publishing' version '0.0.5'
+}
+```
+
+子模块共享的发布脚本（例如 `gradle/publications.gradle`，由子模块 `apply from`）：
+
+```groovy
+apply plugin: 'maven-publish'
+
+publishing {
+  repositories {
+    maven {
+      name = 'mavenCentralStaging'
+      url = rootProject.layout.buildDirectory.dir('publishing/staging-repository')
+    }
+  }
+}
+```
+
+### 调试日志
+
+插件通过 Gradle 标准日志输出发布与聚合信息，日志级别由 Gradle 命令行控制，无需额外配置：
+
+| 命令                    | 可见内容                                                         |
+|-------------------------|------------------------------------------------------------------|
+| 默认                    | 仅 Gradle 常规输出                                               |
+| `./gradlew --info ...`  | `INFO`：staging 仓库位置、聚合的子模块总数                       |
+| `./gradlew --debug ...` | `DEBUG`：每个子模块的聚合/跳过细节及原因、插件应用与任务注册情况 |
+
+例如：
+
+```shell
+./gradlew publishToMavenCentral --dry-run --info
+```
+
+会输出类似：
+
+```
+Maven Central publishing configured for project ':', staging at '.../build/publishing/staging-repository'
+Aggregated 90 subproject publication(s) into ':' Maven Central publishing
+```
+
+`--debug` 时还会逐行列出每个被聚合的子模块，便于排查漏发问题。
