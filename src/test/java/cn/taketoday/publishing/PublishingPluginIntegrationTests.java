@@ -24,6 +24,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.zip.ZipFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -59,7 +60,7 @@ class PublishingPluginIntegrationTests {
         }
         """);
     Files.createDirectories(directory.resolve("library"));
-    Files.createDirectories(directory.resolve("bom"));;
+    Files.createDirectories(directory.resolve("bom"));
 
     BuildResult result = run("publishToMavenCentral", "--dry-run");
     String output = result.getOutput();
@@ -100,10 +101,13 @@ class PublishingPluginIntegrationTests {
         """);
     Files.createDirectories(directory.resolve("library/src/main/java/example"));
     Files.createDirectories(directory.resolve("plain/src/main/java/example"));
+    Path stagingRepository = directory.resolve("build/publishing/staging-repository");
+    Files.createDirectories(stagingRepository);
+    Files.writeString(stagingRepository.resolve("stale.txt"), "previous publication");
 
     BuildResult result = run("publishAllPublicationsToMavenCentralStagingRepository", "mavenCentralZipBundle");
 
-    Path stagingRepository = directory.resolve("build/publishing/staging-repository");
+    assertThat(stagingRepository.resolve("stale.txt")).doesNotExist();
     assertThat(stagingRepository.resolve("com/example/library/1.0.0/library-1.0.0.jar")).exists();
     assertThat(stagingRepository.resolve("com/example/plain")).doesNotExist();
     assertThat(result.getOutput())
@@ -149,6 +153,82 @@ class PublishingPluginIntegrationTests {
             .withPluginClasspath()
             .withArguments(arguments)
             .build();
+  }
+
+  @Test
+  void cleansBeforeParallelPublicationsAndBundlesAllArtifacts() throws IOException {
+    write("settings.gradle", """
+        rootProject.name = 'aggregate'
+        include 'library', 'other'
+        """);
+    write("build.gradle", """
+        plugins {
+          id 'cn.taketoday.publishing'
+          id 'java'
+        }
+        allprojects {
+          apply plugin: 'java'
+          apply plugin: 'maven-publish'
+          group = 'com.example'
+          version = '1.0.0'
+          publishing {
+            publications {
+              maven(MavenPublication) { from components.java }
+            }
+          }
+        }
+        // Exercise the real upload dependency graph without contacting Central.
+        tasks.named('uploadMavenCentralBundle') { enabled = false }
+        """);
+    Files.createDirectories(directory.resolve("library"));
+    Files.createDirectories(directory.resolve("other"));
+    Path staging = directory.resolve("build/publishing/staging-repository");
+    Files.createDirectories(staging);
+    Files.writeString(staging.resolve("stale.txt"), "previous publication");
+
+    BuildResult result = run(":publishToMavenCentral", "--parallel", "--max-workers=4");
+
+    assertThat(result.task(":cleanMavenCentralStagingRepository")).isNotNull();
+    assertThat(staging.resolve("stale.txt")).doesNotExist();
+    try (ZipFile zip = new ZipFile(directory.resolve("build/publishing/bundle.zip").toFile())) {
+      for (String module : new String[] { "aggregate", "library", "other" }) {
+        String artifact = "com/example/" + module + "/1.0.0/" + module + "-1.0.0.jar";
+        assertThat(staging.resolve(artifact)).exists();
+        assertThat(zip.getEntry(artifact)).isNotNull();
+      }
+      assertThat(zip.getEntry("stale.txt")).isNull();
+    }
+    String output = result.getOutput();
+    for (String module : new String[] { "library", "other" }) {
+      assertThat(output.indexOf("> Task :cleanMavenCentralStagingRepository"))
+              .isNotNegative()
+              .isLessThan(output.indexOf("> Task :" + module + ":publishMavenPublicationToMavenCentralStagingRepository"));
+    }
+
+    BuildResult tarResult = run("mavenCentralTarGzBundle", ":publishToMavenCentral", "--dry-run", "--parallel");
+    for (String module : new String[] { "library", "other" }) {
+      assertThat(tarResult.getOutput().indexOf(":" + module + ":publishAllPublicationsToMavenCentralStagingRepository SKIPPED"))
+              .isNotNegative()
+              .isLessThan(tarResult.getOutput().indexOf(":mavenCentralTarGzBundle SKIPPED"));
+    }
+  }
+
+  @Test
+  void rejectsPluginAppliedToSubproject() throws IOException {
+    write("settings.gradle", "include 'library'");
+    write("build.gradle", """
+        plugins { id 'cn.taketoday.publishing' }
+        project(':library') { apply plugin: 'cn.taketoday.publishing' }
+        """);
+    Files.createDirectories(directory.resolve("library"));
+
+    BuildResult result = GradleRunner.create()
+            .withProjectDir(directory.toFile())
+            .withPluginClasspath()
+            .withArguments("help")
+            .buildAndFail();
+
+    assertThat(result.getOutput()).contains("Apply 'cn.taketoday.publishing' only to the root project");
   }
 
   private void write(String name, String content) throws IOException {

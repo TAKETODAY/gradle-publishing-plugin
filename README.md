@@ -109,7 +109,7 @@ mavenCentralPassword=<令牌密码>
 先发布到统一的 `mavenCentralStaging` 仓库，再由根项目一次性打包上传，
 执行一次 `publishToMavenCentral` 即可发布整个构建，无需在根项目手写聚合脚本。
 
-子模块不需要应用本插件，只需满足两个条件：
+本插件仅允许应用到根项目；应用到子模块会在配置阶段报错。聚合发布需满足两个条件：
 
 1. 应用 `maven-publish` 插件，并声明至少一个 `MavenPublication`（普通 `java` 或
    `java-platform` 模块均可）；
@@ -121,6 +121,9 @@ mavenCentralPassword=<令牌密码>
 
 聚合在项目评估完成（`projectsEvaluated`）之后进行，因此不依赖子模块的配置顺序，
 `java-platform` 这类在根项目配置阶段尚未应用 `maven-publish` 的模块也会被正确纳入。
+
+根项目与子模块的 staging 发布任务均先执行一次共享仓库清理；ZIP/TAR.GZ 打包等待
+本次任务图中所有聚合的 staging 发布任务完成，支持使用 `--parallel` 并行构建。
 
 根项目 `build.gradle`：
 

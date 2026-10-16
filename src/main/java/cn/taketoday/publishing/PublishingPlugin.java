@@ -17,6 +17,7 @@
 package cn.taketoday.publishing;
 
 import org.gradle.api.DefaultTask;
+import org.gradle.api.GradleException;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
@@ -29,6 +30,7 @@ import org.gradle.api.provider.Provider;
 import org.gradle.api.publish.PublishingExtension;
 import org.gradle.api.publish.maven.MavenPublication;
 import org.gradle.api.publish.maven.plugins.MavenPublishPlugin;
+import org.gradle.api.publish.maven.tasks.PublishToMavenRepository;
 import org.gradle.api.tasks.Delete;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.bundling.AbstractArchiveTask;
@@ -56,6 +58,16 @@ public class PublishingPlugin implements Plugin<Project> {
 
   private static final String STAGING_REPOSITORY_NAME = "mavenCentralStaging";
 
+  private static final String ZIP_BUNDLE_TASK_NAME = "mavenCentralZipBundle";
+
+  private static final String TAR_GZ_BUNDLE_TASK_NAME = "mavenCentralTarGzBundle";
+
+  private static final String BUNDLE_TASK_NAME = "mavenCentralBundle";
+
+  private static final String UPLOAD_BUNDLE_TASK_NAME = "uploadMavenCentralBundle";
+
+  private static final String PUBLISH_TO_MAVEN_CENTRAL_TASK_NAME = "publishToMavenCentral";
+
   /**
    * Creates a Maven Central publishing plugin.
    */
@@ -64,6 +76,10 @@ public class PublishingPlugin implements Plugin<Project> {
 
   @Override
   public void apply(Project project) {
+    if (project != project.getRootProject()) {
+      throw new GradleException("Apply 'cn.taketoday.publishing' only to the root project; "
+              + "apply 'maven-publish' to subprojects for aggregated publishing.");
+    }
     log.debug("Applying cn.taketoday.publishing to project '{}'", project.getPath());
     project.getPluginManager().apply(SigningPlugin.class);
     project.getPluginManager().apply(MavenPublishPlugin.class);
@@ -93,13 +109,13 @@ public class PublishingPlugin implements Plugin<Project> {
       TaskProvider<?> publishToStagingRepositoryTask = getPublishToStagingRepositoryTask(project, publicationName);
       publishToStagingRepositoryTask.configure(task -> task.dependsOn(cleanStagingRepositoryTask));
       bundleTask.configure(task -> task.mustRunAfter(publishToStagingRepositoryTask));
-      project.getTasks().named("mavenCentralZipBundle").configure(task -> task.mustRunAfter(publishToStagingRepositoryTask));
-      project.getTasks().named("mavenCentralTarGzBundle").configure(task -> task.mustRunAfter(publishToStagingRepositoryTask));
+      project.getTasks().named(ZIP_BUNDLE_TASK_NAME).configure(task -> task.mustRunAfter(publishToStagingRepositoryTask));
+      project.getTasks().named(TAR_GZ_BUNDLE_TASK_NAME).configure(task -> task.mustRunAfter(publishToStagingRepositoryTask));
       registerPublishTask(project, publicationName, publishToStagingRepositoryTask, uploadBundleTask);
     });
     TaskProvider<?> publishAllTask = registerPublishAllTask(project, uploadBundleTask);
     project.getTasks().named(PUBLISH_LIFECYCLE_TASK_NAME).configure(task -> task.dependsOn(publishAllTask));
-    aggregateSubprojects(project, uploadBundleTask, stagingRepositoryDirectory);
+    aggregateSubprojects(project, uploadBundleTask, stagingRepositoryDirectory, cleanStagingRepositoryTask);
     log.debug("Maven Central publishing tasks registered for project '{}'", project.getPath());
   }
 
@@ -112,7 +128,7 @@ public class PublishingPlugin implements Plugin<Project> {
    * {@code mavenCentralStaging} repository are configured automatically.</p>
    */
   private void aggregateSubprojects(Project rootProject, TaskProvider<MavenCentralUploadTask> uploadBundleTask,
-          Provider<Directory> stagingRepositoryDirectory) {
+          Provider<Directory> stagingRepositoryDirectory, TaskProvider<Delete> cleanStagingRepositoryTask) {
     if (rootProject.getSubprojects().isEmpty()) {
       return;
     }
@@ -141,6 +157,13 @@ public class PublishingPlugin implements Plugin<Project> {
                   subproject.getPath(), publishAllToStagingTaskName);
           continue;
         }
+        subproject.getTasks().withType(PublishToMavenRepository.class).configureEach(task -> {
+          if (STAGING_REPOSITORY_NAME.equals(task.getRepository().getName())) {
+            task.dependsOn(cleanStagingRepositoryTask);
+          }
+        });
+        rootProject.getTasks().named(ZIP_BUNDLE_TASK_NAME).configure(task -> task.mustRunAfter(stagingTask));
+        rootProject.getTasks().named(TAR_GZ_BUNDLE_TASK_NAME).configure(task -> task.mustRunAfter(stagingTask));
         publishAllStagingTask.configure(task -> task.dependsOn(stagingTask));
         uploadBundleTask.configure(task -> task.dependsOn(stagingTask));
         aggregated++;
@@ -161,11 +184,11 @@ public class PublishingPlugin implements Plugin<Project> {
   }
 
   private TaskProvider<DefaultTask> registerBundleTask(Project project, Provider<Directory> stagingRepositoryDirectory, MavenCentralExtension extension) {
-    TaskProvider<Zip> zipTask = registerArchiveTask(project, "mavenCentralZipBundle", Zip.class,
+    TaskProvider<Zip> zipTask = registerArchiveTask(project, ZIP_BUNDLE_TASK_NAME, Zip.class,
             stagingRepositoryDirectory, extension, BundleFormat.ZIP);
-    TaskProvider<Tar> tarTask = registerArchiveTask(project, "mavenCentralTarGzBundle", Tar.class,
+    TaskProvider<Tar> tarTask = registerArchiveTask(project, TAR_GZ_BUNDLE_TASK_NAME, Tar.class,
             stagingRepositoryDirectory, extension, BundleFormat.TAR_GZ);
-    return project.getTasks().register("mavenCentralBundle", DefaultTask.class, task -> {
+    return project.getTasks().register(BUNDLE_TASK_NAME, DefaultTask.class, task -> {
       task.setGroup(PUBLISH_TASK_GROUP);
       task.setDescription("Bundles the local '" + STAGING_REPOSITORY_NAME + "' repository content.");
       task.dependsOn(zipTask, tarTask);
@@ -175,6 +198,7 @@ public class PublishingPlugin implements Plugin<Project> {
   private <T extends AbstractArchiveTask> TaskProvider<T> registerArchiveTask(Project project, String name, Class<T> type,
           Provider<Directory> stagingRepositoryDirectory, MavenCentralExtension extension, BundleFormat format) {
     return project.getTasks().register(name, type, task -> {
+      task.setGroup(PUBLISH_TASK_GROUP);
       task.from(stagingRepositoryDirectory);
       task.exclude("**/maven-metadata.xml*");
       task.getDestinationDirectory().set(extension.getBundle().getDestinationDirectory());
@@ -192,12 +216,12 @@ public class PublishingPlugin implements Plugin<Project> {
   private TaskProvider<MavenCentralUploadTask> registerUploadBundleTask(Project project, TaskProvider<DefaultTask> bundleTask,
           Provider<Directory> outputDirectory, MavenCentralExtension extension) {
     TaskProvider<MavenCentralUploadTask> uploadTask = project.getTasks()
-            .register("uploadMavenCentralBundle", MavenCentralUploadTask.class, extension);
+            .register(UPLOAD_BUNDLE_TASK_NAME, MavenCentralUploadTask.class, extension);
     uploadTask.configure(task -> {
       task.setGroup(PUBLISH_TASK_GROUP);
       task.setDescription("Uploads, validates and publishes the '" + bundleTask.getName() + "' to Maven Central.");
-      Provider<RegularFile> zipFile = project.getTasks().named("mavenCentralZipBundle", Zip.class).flatMap(Zip::getArchiveFile);
-      Provider<RegularFile> tarFile = project.getTasks().named("mavenCentralTarGzBundle", Tar.class).flatMap(Tar::getArchiveFile);
+      Provider<RegularFile> zipFile = project.getTasks().named(ZIP_BUNDLE_TASK_NAME, Zip.class).flatMap(Zip::getArchiveFile);
+      Provider<RegularFile> tarFile = project.getTasks().named(TAR_GZ_BUNDLE_TASK_NAME, Tar.class).flatMap(Tar::getArchiveFile);
       task.getBundleFile().set(extension.getBundle().getFormat()
               .flatMap(format -> format == BundleFormat.ZIP ? zipFile : tarFile));
       task.getDeploymentIdFile().set(outputDirectory.map(it -> it.file("deployment-id.txt")));
@@ -220,7 +244,7 @@ public class PublishingPlugin implements Plugin<Project> {
   }
 
   private TaskProvider<?> registerPublishAllTask(Project project, TaskProvider<MavenCentralUploadTask> uploadBundleTask) {
-    return project.getTasks().register("publishToMavenCentral", task -> {
+    return project.getTasks().register(PUBLISH_TO_MAVEN_CENTRAL_TASK_NAME, task -> {
       task.setGroup(PUBLISH_TASK_GROUP);
       task.setDescription("Publishes all Maven publications produced by this project (and its subprojects) to Maven Central.");
       task.dependsOn(project.getTasks().named("publishAllPublicationsTo" + capitalize(STAGING_REPOSITORY_NAME) + "Repository"));
