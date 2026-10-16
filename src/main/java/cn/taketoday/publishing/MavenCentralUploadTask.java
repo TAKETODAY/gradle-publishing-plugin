@@ -35,6 +35,8 @@ import java.util.Set;
 
 import javax.inject.Inject;
 
+import infra.web.client.ResourceAccessException;
+
 /**
  * Bundle File upload to Maven Central Task
  *
@@ -104,6 +106,8 @@ public abstract class MavenCentralUploadTask extends DefaultTask {
     if (statusRequestInterval.isNegative() || statusRequestInterval.toMillis() == 0) {
       throw new IllegalArgumentException("statusRequestInterval must be at least one millisecond");
     }
+    Duration maxDeploymentWait = configuration.getMaxDeploymentWait().get();
+    long startNanos = System.nanoTime();
     File deploymentIdFile = getDeploymentIdFile().get().getAsFile();
 
     var publisherApi = new MavenCentralPublisherAPI(configuration.getBaseUrl().get(),
@@ -119,11 +123,17 @@ public abstract class MavenCentralUploadTask extends DefaultTask {
     String previousState = null;
     int errorCount = 0;
     while (true) {
+      if (!maxDeploymentWait.isNegative() && !maxDeploymentWait.isZero()
+              && Duration.ofNanos(System.nanoTime() - startNanos).compareTo(maxDeploymentWait) > 0) {
+        throw new IllegalStateException(message + ", deployment did not reach "
+                + String.join(" or ", expectedStates) + " within " + maxDeploymentWait
+                + (previousState == null ? "" : ", last observed state: " + previousState));
+      }
       JSONObject status;
       try {
         status = publisherApi.getStatus(deploymentId);
       }
-      catch (IllegalStateException e) {
+      catch (ResourceAccessException | IllegalStateException e) {
         if (++errorCount > maxStatusRetries) {
           throw e;
         }

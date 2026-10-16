@@ -33,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -60,6 +61,7 @@ class MavenCentralConfigurationTests {
     assertThat(extension.getWaitUntilFullyPublished().get()).isFalse();
     assertThat(extension.getStatusRequestInterval().get()).isEqualTo(Duration.ofSeconds(1));
     assertThat(extension.getMaxStatusRetries().get()).isEqualTo(3);
+    assertThat(extension.getMaxDeploymentWait().get()).isEqualTo(Duration.ofMinutes(30));
     assertThat(extension.getBaseUrl().get()).isEqualTo(URI.create("https://central.sonatype.com/"));
 
     extension.credentials(credentials -> {
@@ -185,6 +187,24 @@ class MavenCentralConfigurationTests {
               .withMessageContaining("example:library:1.0");
       assertThat(requests.get()).isEqualTo(1);
       assertThat(task.getDeploymentIdFile().get().getAsFile()).hasContent("deployment-id");
+    }
+    finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  @Timeout(10)
+  void timesOutWhileWaitingForTerminalState() throws Exception {
+    AtomicInteger requests = new AtomicInteger();
+    String[] pending = Collections.nCopies(2000, "{\"deploymentState\":\"PENDING\"}").toArray(new String[0]);
+    HttpServer server = stateServer(requests, new AtomicReference<>(), pending);
+    try {
+      MavenCentralUploadTask task = uploadTask(server);
+      task.getConfiguration().getMaxDeploymentWait().set(Duration.ofMillis(500));
+
+      assertThatIllegalStateException().isThrownBy(task::run)
+              .withMessageContaining("within").withMessageContaining("last observed state: PENDING");
     }
     finally {
       server.stop(0);

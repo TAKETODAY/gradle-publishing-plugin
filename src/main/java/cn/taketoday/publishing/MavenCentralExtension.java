@@ -52,6 +52,7 @@ public abstract class MavenCentralExtension {
     getWaitUntilFullyPublished().convention(false);
     getStatusRequestInterval().convention(Duration.ofSeconds(1));
     getMaxStatusRetries().convention(3);
+    getMaxDeploymentWait().convention(Duration.ofMinutes(60));
     getBaseUrl().convention(URI.create("https://central.sonatype.com/"));
     getBundle().getFormat().convention(BundleFormat.ZIP);
     getBundle().getArchiveFileName().convention(
@@ -114,6 +115,15 @@ public abstract class MavenCentralExtension {
    * @return the nonnegative retry limit
    */
   public abstract Property<Integer> getMaxStatusRetries();
+
+  /**
+   * Returns the maximum time to wait for a deployment to reach a terminal
+   * state (default: thirty minutes). A nonpositive duration disables the
+   * timeout, letting the task poll indefinitely.
+   *
+   * @return the deployment wait timeout
+   */
+  public abstract Property<Duration> getMaxDeploymentWait();
 
   /**
    * Returns the Publisher API base URL (default: https://central.sonatype.com/).
