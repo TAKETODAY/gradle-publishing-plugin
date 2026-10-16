@@ -103,7 +103,7 @@ mavenCentralUsername=<令牌用户名>
 mavenCentralPassword=<令牌密码>
 ```
 
-### 多项目聚合发布
+### 多模块聚合发布
 
 在根项目应用插件后（版本 0.0.5 起），会自动聚合所有子模块的发布产物：每个子模块
 先发布到统一的 `mavenCentralStaging` 仓库，再由根项目一次性打包上传，
@@ -111,9 +111,13 @@ mavenCentralPassword=<令牌密码>
 
 子模块不需要应用本插件，只需满足两个条件：
 
-1. 应用 `maven-publish` 插件，并配置名为 `mavenCentralStaging` 的仓库，指向根项目的
-   `build/publishing/staging-repository` 目录；
-2. 声明至少一个 `MavenPublication`（普通 `java` 或 `java-platform` 模块均可）。
+1. 应用 `maven-publish` 插件，并声明至少一个 `MavenPublication`（普通 `java` 或
+   `java-platform` 模块均可）；
+2. 根项目应用本插件。
+
+指向根项目 `build/publishing/staging-repository` 的 `mavenCentralStaging` 仓库由根插件
+自动扫描并添加：只要子模块应用了 `maven-publish`，且未自定义同名仓库，就会被自动纳入
+聚合，无需手动配置。
 
 聚合在项目评估完成（`projectsEvaluated`）之后进行，因此不依赖子模块的配置顺序，
 `java-platform` 这类在根项目配置阶段尚未应用 `maven-publish` 的模块也会被正确纳入。
@@ -132,14 +136,15 @@ plugins {
 apply plugin: 'maven-publish'
 
 publishing {
-  repositories {
-    maven {
-      name = 'mavenCentralStaging'
-      url = rootProject.layout.buildDirectory.dir('publishing/staging-repository')
+  publications {
+    maven(MavenPublication) {
+      from components.java
     }
   }
 }
 ```
+
+`mavenCentralStaging` 仓库无需配置；如需自定义行为，子模块仍可显式声明同名仓库覆盖自动配置。
 
 ### 调试日志
 

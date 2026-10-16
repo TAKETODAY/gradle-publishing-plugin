@@ -99,7 +99,7 @@ public class PublishingPlugin implements Plugin<Project> {
     });
     TaskProvider<?> publishAllTask = registerPublishAllTask(project, uploadBundleTask);
     project.getTasks().named(PUBLISH_LIFECYCLE_TASK_NAME).configure(task -> task.dependsOn(publishAllTask));
-    aggregateSubprojects(project, uploadBundleTask);
+    aggregateSubprojects(project, uploadBundleTask, stagingRepositoryDirectory);
     log.debug("Maven Central publishing tasks registered for project '{}'", project.getPath());
   }
 
@@ -107,16 +107,34 @@ public class PublishingPlugin implements Plugin<Project> {
    * Aggregates the staging publications of every subproject publishing to the
    * shared {@code mavenCentralStaging} repository into this project's bundle,
    * so a single {@code publishToMavenCentral} uploads the whole build.
+   *
+   * <p>Subprojects applying {@code maven-publish} without a dedicated
+   * {@code mavenCentralStaging} repository are configured automatically.</p>
    */
-  private void aggregateSubprojects(Project project, TaskProvider<MavenCentralUploadTask> uploadBundleTask) {
-    if (project.getSubprojects().isEmpty()) {
+  private void aggregateSubprojects(Project rootProject, TaskProvider<MavenCentralUploadTask> uploadBundleTask,
+          Provider<Directory> stagingRepositoryDirectory) {
+    if (rootProject.getSubprojects().isEmpty()) {
       return;
     }
-    String publishAllToStagingTaskName = "publishAllPublicationsTo" + capitalize(STAGING_REPOSITORY_NAME) + "Repository";
-    project.getGradle().projectsEvaluated(gradle -> {
-      TaskProvider<?> publishAllStagingTask = project.getTasks().named(publishAllToStagingTaskName);
+    rootProject.getGradle().projectsEvaluated(gradle -> {
+      String publishAllToStagingTaskName = "publishAllPublicationsTo" + capitalize(STAGING_REPOSITORY_NAME) + "Repository";
+      TaskProvider<?> publishAllStagingTask = rootProject.getTasks().named(publishAllToStagingTaskName);
       int aggregated = 0;
-      for (Project subproject : project.getSubprojects()) {
+      for (Project subproject : rootProject.getSubprojects()) {
+        PublishingExtension publishingExtension = subproject.getExtensions().findByType(PublishingExtension.class);
+        if (publishingExtension == null) {
+          log.debug("Subproject '{}' does not apply 'maven-publish', skipped from aggregation",
+                  subproject.getPath());
+          continue;
+        }
+        if (publishingExtension.getRepositories().findByName(STAGING_REPOSITORY_NAME) == null) {
+          publishingExtension.getRepositories().maven(repository -> {
+            repository.setName(STAGING_REPOSITORY_NAME);
+            repository.setUrl(subproject.uri(stagingRepositoryDirectory));
+          });
+          log.debug("Auto-configured '{}' repository for subproject '{}'",
+                  STAGING_REPOSITORY_NAME, subproject.getPath());
+        }
         Task stagingTask = subproject.getTasks().findByName(publishAllToStagingTaskName);
         if (stagingTask == null) {
           log.debug("Subproject '{}' has no '{}' task, skipped from aggregation",
@@ -127,10 +145,10 @@ public class PublishingPlugin implements Plugin<Project> {
         uploadBundleTask.configure(task -> task.dependsOn(stagingTask));
         aggregated++;
         log.debug("Aggregated subproject '{}' publication '{}' into project '{}' publishing",
-                subproject.getPath(), stagingTask.getPath(), project.getPath());
+                subproject.getPath(), stagingTask.getPath(), rootProject.getPath());
       }
       log.info("Aggregated {} subproject publication(s) into '{}' Maven Central publishing",
-              aggregated, project.getPath());
+              aggregated, rootProject.getPath());
     });
   }
 

@@ -50,12 +50,6 @@ class PublishingPluginIntegrationTests {
           apply plugin: 'java'
           apply plugin: 'maven-publish'
           publishing {
-            repositories {
-              maven {
-                name = 'mavenCentralStaging'
-                url = rootProject.layout.buildDirectory.dir('publishing/staging-repository')
-              }
-            }
             publications {
               maven(MavenPublication) {
                 from components.java
@@ -93,12 +87,6 @@ class PublishingPluginIntegrationTests {
           group = 'com.example'
           version = '1.0.0'
           publishing {
-            repositories {
-              maven {
-                name = 'mavenCentralStaging'
-                url = rootProject.layout.buildDirectory.dir('publishing/staging-repository')
-              }
-            }
             publications {
               maven(MavenPublication) {
                 from components.java
