@@ -39,26 +39,26 @@ class PublishingPluginIntegrationTests {
   @Test
   void aggregatesSubprojectStagingPublicationsIntoRootPublish() throws IOException {
     write("settings.gradle", """
-        rootProject.name = 'aggregate'
-        include 'library'
-        include 'bom'
-        """);
+            rootProject.name = 'aggregate'
+            include 'library'
+            include 'bom'
+            """);
     write("build.gradle", """
-        plugins {
-          id 'cn.taketoday.publishing'
-        }
-        subprojects {
-          apply plugin: 'java'
-          apply plugin: 'maven-publish'
-          publishing {
-            publications {
-              maven(MavenPublication) {
-                from components.java
+            plugins {
+              id 'cn.taketoday.publishing'
+            }
+            subprojects {
+              apply plugin: 'java'
+              apply plugin: 'maven-publish'
+              publishing {
+                publications {
+                  maven(MavenPublication) {
+                    from components.java
+                  }
+                }
               }
             }
-          }
-        }
-        """);
+            """);
     Files.createDirectories(directory.resolve("library"));
     Files.createDirectories(directory.resolve("bom"));
 
@@ -74,31 +74,31 @@ class PublishingPluginIntegrationTests {
   @Test
   void skipsSubprojectsWithoutPublishingAndBundlesStagedArtifacts() throws IOException {
     write("settings.gradle", """
-        rootProject.name = 'aggregate'
-        include 'library'
-        include 'plain'
-        """);
+            rootProject.name = 'aggregate'
+            include 'library'
+            include 'plain'
+            """);
     write("build.gradle", """
-        plugins {
-          id 'cn.taketoday.publishing'
-        }
-        project(':library') {
-          apply plugin: 'java'
-          apply plugin: 'maven-publish'
-          group = 'com.example'
-          version = '1.0.0'
-          publishing {
-            publications {
-              maven(MavenPublication) {
-                from components.java
+            plugins {
+              id 'cn.taketoday.publishing'
+            }
+            project(':library') {
+              apply plugin: 'java'
+              apply plugin: 'maven-publish'
+              group = 'com.example'
+              version = '1.0.0'
+              publishing {
+                publications {
+                  maven(MavenPublication) {
+                    from components.java
+                  }
+                }
               }
             }
-          }
-        }
-        project(':plain') {
-          apply plugin: 'java'
-        }
-        """);
+            project(':plain') {
+              apply plugin: 'java'
+            }
+            """);
     Files.createDirectories(directory.resolve("library/src/main/java/example"));
     Files.createDirectories(directory.resolve("plain/src/main/java/example"));
     Path stagingRepository = directory.resolve("build/publishing/staging-repository");
@@ -118,28 +118,28 @@ class PublishingPluginIntegrationTests {
   @Test
   void publishesSingleProjectWhenNoSubprojectsPublishToStaging() throws IOException {
     write("settings.gradle", """
-        rootProject.name = 'standalone'
-        """);
+            rootProject.name = 'standalone'
+            """);
     write("build.gradle", """
-        plugins {
-          id 'cn.taketoday.publishing'
-        }
-        apply plugin: 'java'
-        apply plugin: 'maven-publish'
-        publishing {
-          repositories {
-            maven {
-              name = 'mavenCentralStaging'
-              url = layout.buildDirectory.dir('publishing/staging-repository')
+            plugins {
+              id 'cn.taketoday.publishing'
             }
-          }
-          publications {
-            maven(MavenPublication) {
-              from components.java
+            apply plugin: 'java'
+            apply plugin: 'maven-publish'
+            publishing {
+              repositories {
+                maven {
+                  name = 'mavenCentralStaging'
+                  url = layout.buildDirectory.dir('publishing/staging-repository')
+                }
+              }
+              publications {
+                maven(MavenPublication) {
+                  from components.java
+                }
+              }
             }
-          }
-        }
-        """);
+            """);
 
     BuildResult result = run("publishToMavenCentral", "--dry-run");
     assertThat(result.getOutput())
@@ -158,28 +158,28 @@ class PublishingPluginIntegrationTests {
   @Test
   void cleansBeforeParallelPublicationsAndBundlesAllArtifacts() throws IOException {
     write("settings.gradle", """
-        rootProject.name = 'aggregate'
-        include 'library', 'other'
-        """);
+            rootProject.name = 'aggregate'
+            include 'library', 'other'
+            """);
     write("build.gradle", """
-        plugins {
-          id 'cn.taketoday.publishing'
-          id 'java'
-        }
-        allprojects {
-          apply plugin: 'java'
-          apply plugin: 'maven-publish'
-          group = 'com.example'
-          version = '1.0.0'
-          publishing {
-            publications {
-              maven(MavenPublication) { from components.java }
+            plugins {
+              id 'cn.taketoday.publishing'
+              id 'java'
             }
-          }
-        }
-        // Exercise the real upload dependency graph without contacting Central.
-        tasks.named('uploadMavenCentralBundle') { enabled = false }
-        """);
+            allprojects {
+              apply plugin: 'java'
+              apply plugin: 'maven-publish'
+              group = 'com.example'
+              version = '1.0.0'
+              publishing {
+                publications {
+                  maven(MavenPublication) { from components.java }
+                }
+              }
+            }
+            // Exercise the real upload dependency graph without contacting Central.
+            tasks.named('uploadMavenCentralBundle') { enabled = false }
+            """);
     Files.createDirectories(directory.resolve("library"));
     Files.createDirectories(directory.resolve("other"));
     Path staging = directory.resolve("build/publishing/staging-repository");
@@ -217,9 +217,9 @@ class PublishingPluginIntegrationTests {
   void rejectsPluginAppliedToSubproject() throws IOException {
     write("settings.gradle", "include 'library'");
     write("build.gradle", """
-        plugins { id 'cn.taketoday.publishing' }
-        project(':library') { apply plugin: 'cn.taketoday.publishing' }
-        """);
+            plugins { id 'cn.taketoday.publishing' }
+            project(':library') { apply plugin: 'cn.taketoday.publishing' }
+            """);
     Files.createDirectories(directory.resolve("library"));
 
     BuildResult result = GradleRunner.create()
