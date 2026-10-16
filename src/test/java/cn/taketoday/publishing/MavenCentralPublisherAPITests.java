@@ -25,10 +25,12 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
@@ -101,6 +103,38 @@ class MavenCentralPublisherAPITests {
       Path bundle = Files.write(directory.resolve("bundle.zip"), new byte[] { 1, 2, 3 });
 
       assertThat(api.upload(bundle.toFile(), "test-deployment", PublishingType.AUTOMATIC)).isEqualTo("deployment-id");
+    }
+    finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  void uploadEncodesDeploymentNameInQuery() throws Exception {
+    AtomicReference<String> rawQuery = new AtomicReference<>();
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/api/v1/publisher/upload", exchange -> {
+      exchange.getRequestBody().readAllBytes();
+      rawQuery.set(exchange.getRequestURI().getRawQuery());
+      byte[] response = "deployment-id".getBytes(StandardCharsets.UTF_8);
+      exchange.sendResponseHeaders(201, response.length);
+      try (var body = exchange.getResponseBody()) {
+        body.write(response);
+      }
+    });
+    server.start();
+    try {
+      var project = ProjectBuilder.builder().withProjectDir(directory.toFile()).build();
+      PasswordCredentials credentials = project.getObjects().newInstance(PasswordCredentials.class);
+      credentials.setUsername("test-user");
+      credentials.setPassword("test-password");
+      var api = new MavenCentralPublisherAPI(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/"), credentials);
+      Path bundle = Files.write(directory.resolve("bundle.zip"), new byte[] { 1, 2, 3 });
+      String deploymentName = "my deployment & co";
+
+      assertThat(api.upload(bundle.toFile(), deploymentName, PublishingType.AUTOMATIC)).isEqualTo("deployment-id");
+      String decoded = URLDecoder.decode(rawQuery.get(), StandardCharsets.UTF_8);
+      assertThat(decoded).isEqualTo("name=my deployment & co&publishingType=AUTOMATIC");
     }
     finally {
       server.stop(0);
