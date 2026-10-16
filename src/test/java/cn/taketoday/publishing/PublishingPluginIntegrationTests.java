@@ -72,6 +72,33 @@ class PublishingPluginIntegrationTests {
   }
 
   @Test
+  void registersMavenCentralTasksForSubprojectPublications() throws IOException {
+    write("settings.gradle", "rootProject.name = 'aggregate'; include 'library'");
+    write("build.gradle", """
+            plugins { id 'cn.taketoday.publishing' }
+            project(':library') {
+              apply plugin: 'java'
+              apply plugin: 'maven-publish'
+              group = 'example'
+              version = '1.0.0'
+              publishing {
+                publications {
+                  library(MavenPublication) { from components.java }
+                }
+              }
+            }
+            """);
+    Files.createDirectories(directory.resolve("library"));
+
+    BuildResult result = run(":library:publishLibraryPublicationToMavenCentral", "--dry-run");
+
+    assertThat(result.getOutput())
+            .contains(":library:publishLibraryPublicationToMavenCentralStagingRepository")
+            .contains(":uploadMavenCentralBundle")
+            .doesNotContain(":publishAllPublicationsToMavenCentralStagingRepository");
+  }
+
+  @Test
   void skipsSubprojectsWithoutPublishingAndBundlesStagedArtifacts() throws IOException {
     write("settings.gradle", """
             rootProject.name = 'aggregate'
