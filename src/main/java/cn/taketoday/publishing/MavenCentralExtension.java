@@ -42,6 +42,8 @@ public abstract class MavenCentralExtension {
 
   /**
    * Creates Maven Central publishing options.
+   *
+   * @param objects the factory used to create configuration properties
    */
   @Inject
   public MavenCentralExtension(ObjectFactory objects) {
@@ -184,6 +186,8 @@ public abstract class MavenCentralExtension {
     }
 
     /**
+     * Returns the archive file name.
+     *
      * @return the archive file name
      */
     public Property<String> getArchiveFileName() {
@@ -191,6 +195,8 @@ public abstract class MavenCentralExtension {
     }
 
     /**
+     * Returns the archive destination directory.
+     *
      * @return the archive destination directory
      */
     public DirectoryProperty getDestinationDirectory() {
@@ -198,6 +204,8 @@ public abstract class MavenCentralExtension {
     }
 
     /**
+     * Returns whether ZIP64 is enabled.
+     *
      * @return whether ZIP64 is enabled
      */
     public Property<Boolean> getZip64() {
